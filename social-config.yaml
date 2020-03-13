@@ -1,0 +1,32 @@
+behavior:
+
+  chase:
+    maximum_distance_cm: 5
+    minimum_speed_cm_sec: 15
+    minimum_duration_sec: 1
+    maximum_gap_sec: 0.5
+    minimum_chase_direction_agreement: 0.8
+
+  oral_oral_contact:
+    minimum_distance_cm: 1.5
+    minimum_duration_sec: 0.25
+
+  oral_genital_contact:
+    minimum_distance_cm: 1.5
+    minimum_duration_sec: 0.25
+
+pose:
+  frames_per_sec: 30
+  min_track_duration_sec: 10
+  pixels_per_cm: 10
+
+  interpolation:
+
+    # The maximum distance travelled allowed for point being interpolated.
+    # Interpolation won't be done for any point exceeding this threshold.
+    maximum_point_distance_cm: 3
+
+    # The maximum distance travelled allowed for the mean of all points in
+    # an interpolation interval. Interpolation won't be done for any interval
+    # exceeding this threshold.
+    maximum_mean_point_distance_cm: 6
