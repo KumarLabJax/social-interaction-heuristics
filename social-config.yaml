@@ -4,16 +4,38 @@ behavior:
     maximum_distance_cm: 5
     minimum_speed_cm_sec: 15
     minimum_duration_sec: 1
+
+    # if chase tracks are seperated by a duration that is <=
+    # this value they will be joined together as a single chase
     maximum_gap_sec: 0.5
+
+    # in a chase event the chaser is headed toward the animal being
+    # chased. This value determines how much deviation is allowed in
+    # chase direction when determining a chase event.
+    maximum_chase_direction_deviation_deg: 30
+
+    # For a continuous chase event this value (in a 0-1 range) determines
+    # the proportion of frames that need to fall withing the
+    # direction deviation threshold specified above. If this
+    # proportion of frames is not met the interval is not
+    # labeled chase.
     minimum_chase_direction_agreement: 0.8
 
   oral_oral_contact:
-    minimum_distance_cm: 1.5
+    maximum_distance_cm: 1.5
     minimum_duration_sec: 0.25
 
+    # if contact tracks are seperated by a duration that is <=
+    # this value they will be joined together as a single chase
+    maximum_gap_sec: 0.5
+
   oral_genital_contact:
-    minimum_distance_cm: 1.5
+    maximum_distance_cm: 1.5
     minimum_duration_sec: 0.25
+
+    # if contact tracks are seperated by a duration that is <=
+    # this value they will be joined together as a single chase
+    maximum_gap_sec: 0.5
 
 pose:
   frames_per_sec: 30

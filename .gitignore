@@ -1,0 +1,6 @@
+tempout/
+tempout2/
+__pycache__/
+*.tmp
+.dirconf
+*tempout.h5

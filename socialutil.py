@@ -380,12 +380,7 @@ def calc_track_relationship(track1, track2):
         return track_relationship
 
 
-def detect_chase(
-        track_relationship,
-        maximum_distance_px,
-        minimum_speed_px_frame,
-        minimum_duration_frames,
-        maximum_gap_frames):
+def detect_chase(track_relationship, maximum_distance_px, minimum_speed_px_frame):
 
     track1 = track_relationship['track1']
     track1_start = track_relationship['track1_start_pose']
@@ -405,7 +400,34 @@ def detect_chase(
 
     return all_enough
 
-def detect_chase_direction(track_relationship, chase_interval):
+
+def detect_point_proximity(
+        track_relationship,
+        point_index1, point_index2,
+        maximum_distance_px):
+
+    track1 = track_relationship['track1']
+    track1_start = track_relationship['track1_start_pose']
+    track1_stop = track_relationship['track1_stop_pose_exclu']
+    track1_points = track1['points'][track1_start:track1_stop, point_index1, :]
+    masks1 = track1['points'][track1_start:track1_stop, point_index1]
+
+    track2 = track_relationship['track2']
+    track2_start = track_relationship['track2_start_pose']
+    track2_stop = track_relationship['track2_stop_pose_exclu']
+    track2_points = track2['points'][track2_start:track2_stop, point_index2, :]
+    masks2 = track2['points'][track2_start:track2_stop, point_index2]
+
+    point_offsets = track2_points - track1_points
+    point_offset_dists = np.linalg.norm(point_offsets, axis=-1)
+    points_close_enough = point_offset_dists <= maximum_distance_px
+
+    points_valid_and_close = np.stack([masks1, masks2, points_close_enough]).all(axis=0)
+
+    return points_valid_and_close
+
+
+def detect_chase_direction(track_relationship, chase_interval, chase_max_norm_of_deviation):
     """
     For each frame in the chase_interval this function determines chase
     direction for the given track_relationship. This is returned as a
@@ -436,10 +458,26 @@ def detect_chase_direction(track_relationship, chase_interval):
 
     offset_unit_vectors = track_relationship['track_offset_unit_vectors'][chase_start:chase_stop]
 
-    # we determine
-    chase_direction = (
-        np.linalg.norm(track1_movement_direction + offset_unit_vectors, axis=-1)
-        < np.linalg.norm(track2_movement_direction - offset_unit_vectors, axis=-1)
-    )
+    # after summing the offset vector and movement vector comparing the size of
+    # the norm should give us the chase direction
+    track1_chase_norms = np.linalg.norm(track1_movement_direction + offset_unit_vectors, axis=-1)
+    track1_chaser_proportion = np.mean(track1_chase_norms >= chase_max_norm_of_deviation)
 
-    return chase_direction
+    track2_chase_norms = np.linalg.norm(track2_movement_direction - offset_unit_vectors, axis=-1)
+    track2_chaser_proportion = np.mean(track2_chase_norms >= chase_max_norm_of_deviation)
+
+    return track1_chaser_proportion, track2_chaser_proportion
+
+
+def norm_of_deviation(theta_deg):
+    """
+    This function considers two unit vectors. The angle between these
+    vectors is the given theta. We calculate and return the norm of the sum
+    of these two vectors. This norm is useful for thresholding our
+    chase behavior because the norm will increase with a smaller
+    absolute value of theta and decrease with a larger absolute value.
+    """
+    theta_rad = math.radians(theta_deg)
+    vec = np.array([1.0 + math.cos(theta_rad), math.sin(theta_rad)])
+
+    return np.linalg.norm(vec)
