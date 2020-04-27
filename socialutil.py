@@ -410,13 +410,13 @@ def detect_point_proximity(
     track1_start = track_relationship['track1_start_pose']
     track1_stop = track_relationship['track1_stop_pose_exclu']
     track1_points = track1['points'][track1_start:track1_stop, point_index1, :]
-    masks1 = track1['points'][track1_start:track1_stop, point_index1]
+    masks1 = track1['point_masks'][track1_start:track1_stop, point_index1]
 
     track2 = track_relationship['track2']
     track2_start = track_relationship['track2_start_pose']
     track2_stop = track_relationship['track2_stop_pose_exclu']
     track2_points = track2['points'][track2_start:track2_stop, point_index2, :]
-    masks2 = track2['points'][track2_start:track2_stop, point_index2]
+    masks2 = track2['point_masks'][track2_start:track2_stop, point_index2]
 
     point_offsets = track2_points - track1_points
     point_offset_dists = np.linalg.norm(point_offsets, axis=-1)

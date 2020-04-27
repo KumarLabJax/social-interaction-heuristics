@@ -1,6 +1,8 @@
-tempout/
-tempout2/
+tempout*
 __pycache__/
 *.tmp
 .dirconf
 *tempout.h5
+bad-oo-contact/
+good-oo-contact/
+.ipynb_checkpoints/

@@ -56,7 +56,7 @@ def gen_instance_tracks(data_file_name, social_config):
             socialutil.calculate_point_velocities(track)
             socialutil.calculate_convex_hulls(track)
 
-        return track_dict
+        return track_dict, len(all_instance_count) / fps
 
 
 def detect_chase_events(track_relationships, social_config):
@@ -111,21 +111,22 @@ def detect_chase_events(track_relationships, social_config):
 
             if chaser_track_id != -1:
                 yield {
-                    'chaser_track_id': chaser_track_id,
-                    'chasee_track_id': chasee_track_id,
-                    'start_frame': chase_start,
-                    'stop_frame_exclu': chase_stop,
+                    'chaser_track_id': int(chaser_track_id),
+                    'chasee_track_id': int(chasee_track_id),
+                    'start_frame': int(chase_start),
+                    'stop_frame_exclu': int(chase_stop),
                 }
 
 
 def detect_point_contact_events(
         track_relationships,
         point_index1, point_index2,
-        maximum_distance_px, minimum_duration_frames, maximum_gap_frames):
+        maximum_distance_px, minimum_duration_frames, maximum_gap_frames,
+        approach_dist_px, approach_frames_before_contact):
 
     for track_relationship in track_relationships:
         proximal_frames = socialutil.detect_point_proximity(
-            track_relationship, point_index1, point_index2)
+            track_relationship, point_index1, point_index2, maximum_distance_px)
 
         proximity_intervals = socialutil.find_intervals(proximal_frames, True)
 
@@ -138,18 +139,26 @@ def detect_point_contact_events(
 
         for proximity_interval in proximity_intervals:
 
-            # The interval is relative to the track_relationship start frame.
-            # Let's change it so that that it's absolute frame index
+            # filter out any contact events that were not preceeded by an approach
             contact_start, contact_stop = proximity_interval
-            contact_start += track_relationship['start_frame']
-            contact_stop += track_relationship['start_frame']
 
-            yield {
-                'track1_id': track_relationship['track1']['track_id'],
-                'track2_id': track_relationship['track2']['track_id'],
-                'start_frame': contact_start,
-                'stop_frame_exclu': contact_stop,
-            }
+            approach_start_index = max(0, contact_start - approach_frames_before_contact)
+            track_distances = track_relationship['track_distances']
+            contact_start_distance = track_distances[contact_start]
+            approach_max_distance = track_distances[approach_start_index : contact_start + 1].max()
+
+            if approach_max_distance - contact_start_distance >= approach_dist_px:
+                # The interval is relative to the track_relationship start frame.
+                # Let's change it so that that it's absolute frame index
+                contact_start += track_relationship['start_frame']
+                contact_stop += track_relationship['start_frame']
+
+                yield {
+                    'track1_id': int(track_relationship['track1']['track_id']),
+                    'track2_id': int(track_relationship['track2']['track_id']),
+                    'start_frame': int(contact_start),
+                    'stop_frame_exclu': int(contact_stop),
+                }
 
 
 def detect_oral_oral_contact_events(track_relationships, social_config):
@@ -164,10 +173,14 @@ def detect_oral_oral_contact_events(track_relationships, social_config):
     minimum_duration_frames = oral_oral_config['minimum_duration_sec'] * fps
     maximum_gap_frames = oral_oral_config['maximum_gap_sec'] * fps
 
+    approach_dist_px = oral_oral_config['approach_dist_cm'] * pixels_per_cm
+    approach_frames_before_contact = oral_oral_config['approach_secs_before_contact'] * fps
+
     return detect_point_contact_events(
         track_relationships,
         socialutil.NOSE_INDEX, socialutil.NOSE_INDEX,
-        maximum_distance_px, minimum_duration_frames, maximum_gap_frames)
+        maximum_distance_px, minimum_duration_frames, maximum_gap_frames,
+        approach_dist_px, approach_frames_before_contact)
 
 
 def detect_oral_genital_contact_events(track_relationships, social_config):
@@ -182,23 +195,28 @@ def detect_oral_genital_contact_events(track_relationships, social_config):
     minimum_duration_frames = oral_genital_config['minimum_duration_sec'] * fps
     maximum_gap_frames = oral_genital_config['maximum_gap_sec'] * fps
 
+    approach_dist_px = oral_genital_config['approach_dist_cm'] * pixels_per_cm
+    approach_frames_before_contact = oral_genital_config['approach_secs_before_contact'] * fps
+
     return itertools.chain(
 
         detect_point_contact_events(
             track_relationships,
             socialutil.NOSE_INDEX, socialutil.BASE_TAIL_INDEX,
-            maximum_distance_px, minimum_duration_frames, maximum_gap_frames),
+            maximum_distance_px, minimum_duration_frames, maximum_gap_frames,
+            approach_dist_px, approach_frames_before_contact),
 
         detect_point_contact_events(
             track_relationships,
             socialutil.BASE_TAIL_INDEX, socialutil.NOSE_INDEX,
-            maximum_distance_px, minimum_duration_frames, maximum_gap_frames),
+            maximum_distance_px, minimum_duration_frames, maximum_gap_frames,
+            approach_dist_px, approach_frames_before_contact),
 
     )
 
 
 def gen_social_stats(net_file_name, pose_file_name, social_config):
-    instance_tracks = gen_instance_tracks(pose_file_name, social_config)
+    instance_tracks, duration_secs = gen_instance_tracks(pose_file_name, social_config)
     track_relationships = list(socialutil.calc_track_relationships(
         sorted(instance_tracks.values(), key=lambda track: track['start_frame'])))
     all_chases = list(detect_chase_events(track_relationships, social_config))
@@ -210,6 +228,7 @@ def gen_social_stats(net_file_name, pose_file_name, social_config):
         'chases': all_chases,
         'oral_oral_contact': all_oral_oral,
         'oral_genital_contact': all_oral_genital,
+        'duration_secs': duration_secs,
     }
 
 
@@ -236,6 +255,30 @@ def gen_all_social_stats(data_file_names, social_config, num_procs):
                 if video_stats is not None:
                     yield video_stats
 
+# share_root=/home/sheppk/smb/labshare/VideoData/MDS_Tests/BTBR_3M_stranger_4day
+# python -u gensocialstats.py \
+#   --social-config social-config.yaml \
+#   --batch-file btbr-vids.txt \
+#   --root-dir "${share_root}" \
+#   --out-file BTBR_3M_stranger_4day-out-2020-04-22.yaml
+
+# share_root=/home/sheppk/smb/labshare/VideoData/MDS_Tests/B6J_3M_stranger_4day
+# python -u gensocialstats.py \
+#   --social-config social-config.yaml \
+#   --batch-file b6-vids.txt \
+#   --root-dir "${share_root}" \
+#   --out-file B6_3M_stranger_4day-out-2020-04-22.yaml
+
+# python -u gensocialstats.py \
+#   --social-config social-config.yaml \
+#   --batch-file btbr-vids.txt \
+#   --root-dir ~/smb/labshare/VideoData/MDS_Tests/BTBR_3M_stranger_4day \
+#   --out-file BTBR_3M_stranger_4day-out-2020-04-22.yaml
+# python -u gensocialstats.py \
+#   --social-config social-config.yaml \
+#   --batch-file b6-vids.txt \
+#   --root-dir ~/smb/labshare/VideoData/MDS_Tests/B6J_3M_stranger_4day \
+#   --out-file B6_3M_stranger_4day-out-2020-04-22.yaml
 
 def main():
     parser = argparse.ArgumentParser()
@@ -285,73 +328,10 @@ def main():
     if outdir:
         os.makedirs(outdir, exist_ok=True)
 
-    with h5py.File(args.out_file, 'w') as social_h5:
-        for video_stats in gen_all_social_stats(data_file_names, social_config, args.num_procs):
-
-            escaped_file_name = urlparse.quote(video_stats['network_filename'], safe='')
-            vid_grp = social_h5.create_group(escaped_file_name)
-
-            # save chases to HDF5
-            all_chases = video_stats['chases']
-            chase_track_ids = np.array(
-                [[c['chaser_track_id'], c['chasee_track_id']] for c in all_chases],
-                dtype=np.uint32,
-            )
-            vid_grp['chase_track_ids'] = chase_track_ids
-
-            chase_start_frame = np.array(
-                [c['start_frame'] for c in all_chases],
-                dtype=np.uint32,
-            )
-            vid_grp['chase_start_frame'] = chase_start_frame
-
-            chase_frame_count = np.array(
-                [c['stop_frame_exclu'] - c['start_frame'] for c in all_chases],
-                dtype=np.uint32,
-            )
-            vid_grp['chase_frame_count'] = chase_frame_count
-
-            # save oral oral contact to HDF5
-            all_oral_oral_contact = video_stats['oral_oral_contact']
-            oral_oral_track_ids = np.array(
-                [[ooc['track1_id'], ooc['track2_id']] for ooc in all_oral_oral_contact],
-                dtype=np.uint32,
-            )
-            vid_grp['oral_oral_contact_track_ids'] = oral_oral_track_ids
-
-            oral_oral_start_frame = np.array(
-                [ooc['start_frame'] for ooc in all_oral_oral_contact],
-                dtype=np.uint32,
-            )
-            vid_grp['oral_oral_contact_start_frame'] = oral_oral_start_frame
-
-            oral_oral_frame_count = np.array(
-                [ooc['stop_frame_exclu'] - ooc['start_frame'] for ooc in all_oral_oral_contact],
-                dtype=np.uint32,
-            )
-            vid_grp['oral_oral_contact_frame_count'] = oral_oral_frame_count
-
-            # save oral genital contact to HDF5
-            all_oral_genital_contact = video_stats['oral_genital_contact']
-            oral_genital_track_ids = np.array(
-                [[ogc['track1_id'], ogc['track2_id']] for ogc in all_oral_genital_contact],
-                dtype=np.uint32,
-            )
-            vid_grp['oral_genital_contact_track_ids'] = oral_genital_track_ids
-
-            oral_genital_start_frame = np.array(
-                [ogc['start_frame'] for ogc in all_oral_genital_contact],
-                dtype=np.uint32,
-            )
-            vid_grp['oral_genital_contact_start_frame'] = oral_genital_start_frame
-
-            oral_genital_frame_count = np.array(
-                [ogc['stop_frame_exclu'] - ogc['start_frame'] for ogc in all_oral_genital_contact],
-                dtype=np.uint32,
-            )
-            vid_grp['oral_genital_contact_frame_count'] = oral_genital_frame_count
-
-            print('PROCESSED:', video_stats['network_filename'])
+    with open(args.out_file, 'w') as social_yaml:
+        yaml.safe_dump_all(
+            gen_all_social_stats(data_file_names, social_config, args.num_procs),
+            social_yaml)
 
 
 if __name__ == "__main__":
