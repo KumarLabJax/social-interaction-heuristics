@@ -215,8 +215,33 @@ def detect_oral_genital_contact_events(track_relationships, social_config):
     )
 
 
+def distance_traveled_per_track(tracks, social_config):
+    # extract some config stuff
+    pose_config = social_config['pose']
+
+    fps = pose_config['frames_per_sec']
+    pixels_per_cm = pose_config['pixels_per_cm']
+
+    dist_traveled_conf = social_config['behavior']['distance_traveled']
+    still_displacement_threshold_px = dist_traveled_conf['still_displacement_threshold_cm'] * pixels_per_cm
+    still_time_threshold_frames = dist_traveled_conf['still_time_threshold_sec'] * fps
+
+    for track in tracks:
+        dist_traveled_px = socialutil.calc_track_distance_traveled(
+            track,
+            still_displacement_threshold_px,
+            still_time_threshold_frames,
+        )
+
+        yield {
+            'track_id': int(track['track_id']),
+            'distance_traveled_cm': float(dist_traveled_px / pixels_per_cm),
+        }
+
+
 def gen_social_stats(net_file_name, pose_file_name, social_config):
     instance_tracks, duration_secs = gen_instance_tracks(pose_file_name, social_config)
+    all_distance_traveled = list(distance_traveled_per_track(instance_tracks.values(), social_config))
     track_relationships = list(socialutil.calc_track_relationships(
         sorted(instance_tracks.values(), key=lambda track: track['start_frame'])))
     all_chases = list(detect_chase_events(track_relationships, social_config))
@@ -225,6 +250,7 @@ def gen_social_stats(net_file_name, pose_file_name, social_config):
 
     return {
         'network_filename': net_file_name,
+        'distance_traveled': all_distance_traveled,
         'chases': all_chases,
         'oral_oral_contact': all_oral_oral,
         'oral_genital_contact': all_oral_genital,
