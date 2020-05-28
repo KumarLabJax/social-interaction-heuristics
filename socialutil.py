@@ -481,3 +481,34 @@ def norm_of_deviation(theta_deg):
     vec = np.array([1.0 + math.cos(theta_rad), math.sin(theta_rad)])
 
     return np.linalg.norm(vec)
+
+
+def calc_track_distance_traveled(track, still_displacement_threshold_px, still_time_threshold_frames):
+
+    centroids = np.stack([np.array(ch.centroid) for ch in track['convex_hulls']])
+    centroid_velocities = np.gradient(centroids, axis=-2)
+    centroid_speeds = np.linalg.norm(centroid_velocities, axis=-1)
+
+    centroid_still = np.ones(centroids.shape[0], dtype=np.bool)
+    #for i in range(centroids.shape[0]):
+    for i in range(0, centroids.shape[0], still_time_threshold_frames // 4):
+        is_still = True
+        for j in reversed(range(i + 1, min(centroids.shape[0], i + still_time_threshold_frames + 1))):
+
+            if not centroid_still[j]:
+                break
+
+            if is_still:
+                ij_displacement_vec = centroids[j, :] - centroids[i, :]
+                ij_distance = np.linalg.norm(ij_displacement_vec)
+
+                if ij_distance >= still_displacement_threshold_px:
+                    is_still = False
+                    centroid_still[i] = False
+                    centroid_still[j] = False
+            else:
+                centroid_still[j] = False
+
+    centroid_speeds[centroid_still] = 0
+
+    return centroid_speeds.sum()

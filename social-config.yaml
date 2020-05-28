@@ -1,6 +1,11 @@
 behavior:
 
   chase:
+
+    # For an interval to be called chase we require the mice to be
+    # within a given distance of eachother, traveling at least as
+    # fast as the given speed and this condition must last at least
+    # for the given duration.
     maximum_distance_cm: 5
     minimum_speed_cm_sec: 15
     minimum_duration_sec: 1
@@ -22,6 +27,9 @@ behavior:
     minimum_chase_direction_agreement: 0.8
 
   oral_oral_contact:
+
+    # contact must occur within a given distance and must last
+    # at least the specified duration
     maximum_distance_cm: 1.5
     minimum_duration_sec: 0.25
 
@@ -38,6 +46,9 @@ behavior:
     approach_secs_before_contact: 5
 
   oral_genital_contact:
+
+    # contact must occur within a given distance and must last
+    # at least the specified duration
     maximum_distance_cm: 1.5
     minimum_duration_sec: 0.25
 
@@ -53,6 +64,15 @@ behavior:
     approach_dist_cm: 5
     approach_secs_before_contact: 5
 
+  distance_traveled:
+
+    # the "still" parameters determine that an animal is still
+    # if its displacement is less than the given distance
+    # within the given time window. This prevents position jitter
+    # from contributing to the distance traveled metric.
+    still_displacement_threshold_cm: 3
+    still_time_threshold_sec: 3
+
 pose:
   frames_per_sec: 30
   min_track_duration_sec: 10
@@ -60,11 +80,11 @@ pose:
 
   interpolation:
 
-    # The maximum distance travelled allowed for point being interpolated.
+    # The maximum distance traveled allowed for point being interpolated.
     # Interpolation won't be done for any point exceeding this threshold.
     maximum_point_distance_cm: 3
 
-    # The maximum distance travelled allowed for the mean of all points in
+    # The maximum distance traveled allowed for the mean of all points in
     # an interpolation interval. Interpolation won't be done for any interval
     # exceeding this threshold.
     maximum_mean_point_distance_cm: 6
