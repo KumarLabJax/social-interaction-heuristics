@@ -68,6 +68,7 @@ class InteractionVideoClip(object):
         return track_pose, track_pose_mask
 
     def process_frame(self, frame):
+        frame = frame.copy()
         if self.out_file_writer is None:
             os.makedirs(os.path.dirname(self.out_file_name), exist_ok=True)
             self.out_file_writer = imageio.get_writer(self.out_file_name, fps=30)
@@ -89,7 +90,7 @@ class InteractionVideoClip(object):
                 pose2, pose_mask2,
                 CHASEE_CHASE_COLOR if interaction_active else CHASEE_NON_CHASE_COLOR)
 
-        print('writing frame', self.curr_frame_index)
+        # print('writing frame', self.curr_frame_index)
         self.out_file_writer.append_data(frame)
 
         self.curr_frame_index += 1
@@ -161,16 +162,16 @@ def main():
                 if not os.path.exists(in_video_path):
                     # print('WARNING: ' + in_video_path + ' does not exist')
                     continue
-                else:
-                    print('YO it exsts', in_video_path)
             else:
                 assert os.path.exists(in_video_path), in_video_path + ' does not exist'
+
+            print('PROCESSING:', net_id)
 
             file_no_ext, _ = os.path.splitext(in_video_path)
             pose_file_name = file_no_ext + '_pose_est_v3.h5'
             assert os.path.exists(pose_file_name)
 
-            tracks = gensocialstats.gen_instance_tracks(pose_file_name, social_config)
+            tracks, duration_sec = gensocialstats.gen_instance_tracks(pose_file_name, social_config)
 
             vid_clips = dict()
             for og_contact_index, og_contact in enumerate(video_doc['oral_genital_contact']):
@@ -244,6 +245,32 @@ def main():
                     vid_clips[curr_chase.start_frame].append(curr_chase)
                 else:
                     vid_clips[curr_chase.start_frame] = [curr_chase]
+
+            for approach_index, approach in enumerate(video_doc['approaches']):
+                approacher_track = tracks[approach['approacher_track_id']]
+                approached_track = tracks[approach['approached_track_id']]
+
+                out_file_name = os.path.join(
+                    args.out_dir,
+                    escaped_net_id_root +
+                            '_' + str(approach['approach_type']) +
+                            '_' + str(approach_index) +
+                            '_' + str(approach['approacher_track_id']) +
+                            '_' + str(approach['approached_track_id']) + '.avi',
+                )
+
+                curr_approach = InteractionVideoClip(
+                    out_file_name,
+                    approacher_track,
+                    approached_track,
+                    approach['start_frame'],
+                    approach['stop_frame_exclu'],
+                    exclude_points,
+                )
+                if curr_approach.start_frame in vid_clips:
+                    vid_clips[curr_approach.start_frame].append(curr_approach)
+                else:
+                    vid_clips[curr_approach.start_frame] = [curr_approach]
 
             if vid_clips:
                 with imageio.get_reader(in_video_path) as video_reader:

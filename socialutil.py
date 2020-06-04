@@ -298,8 +298,12 @@ def calculate_convex_hulls(track):
 
 def gen_convex_hulls(points, point_masks):
     for pose_index in range(len(points)):
-        curr_points = points[pose_index, point_masks[pose_index], :]
-        curr_shape = MultiPoint(curr_points).convex_hull
+        curr_points = points[pose_index, :-2, :]
+        curr_mask = point_masks[pose_index, :-2]
+        curr_shape = MultiPoint(curr_points[curr_mask, :]).convex_hull
+
+        # curr_points = points[pose_index, point_masks[pose_index], :]
+        # curr_shape = MultiPoint(curr_points).convex_hull
 
         yield curr_shape
 
@@ -512,3 +516,106 @@ def calc_track_distance_traveled(track, still_displacement_threshold_px, still_t
     centroid_speeds[centroid_still] = 0
 
     return centroid_speeds.sum()
+
+
+def _detect_approach_intervals(
+        track_relationship,
+        minimum_pre_approach_distance_px,
+        maximum_arrival_distance_px,
+        maximum_approach_duration_frames):
+
+    pre_approach_candidate_frames = track_relationship['track_distances'] >= minimum_pre_approach_distance_px
+    arrival_candidate_frames = track_relationship['track_distances'] <= maximum_arrival_distance_px
+
+    for i in range(len(pre_approach_candidate_frames) - 1):
+
+        if pre_approach_candidate_frames[i] and not pre_approach_candidate_frames[i + 1]:
+            approach_start_frame = i + 1
+            nearest_approach_distance = 0
+            approach_stop_frame = -1
+
+            for j in range(approach_start_frame, len(pre_approach_candidate_frames)):
+                if pre_approach_candidate_frames[j] or j - approach_start_frame > maximum_approach_duration_frames:
+                    break
+
+                if arrival_candidate_frames[j]:
+                    curr_distance = track_relationship['track_distances'][j]
+                    assert curr_distance >= 0
+                    if approach_stop_frame == -1 or curr_distance < nearest_approach_distance:
+                        approach_stop_frame = j + 1
+                        nearest_approach_distance = curr_distance
+
+            if approach_stop_frame != -1:
+                yield approach_start_frame, approach_stop_frame
+
+
+def detect_approach_intervals(
+        track_relationship,
+        minimum_pre_approach_distance_px,
+        maximum_arrival_distance_px,
+        maximum_approach_duration_frames,
+        maximum_still_speed_px_frame):
+
+    # TODO it may be better to work off centroid speeds as is done in calc_track_distance_traveled
+
+    intervals = _detect_approach_intervals(
+        track_relationship,
+        minimum_pre_approach_distance_px,
+        maximum_arrival_distance_px,
+        maximum_approach_duration_frames)
+
+    for approach_start_frame, approach_stop_frame in intervals:
+
+        track1 = track_relationship['track1']
+        track1_approach_start_pose = approach_start_frame + track_relationship['track1_start_pose']
+        track1_approach_stop_pose = approach_stop_frame + track_relationship['track1_start_pose']
+        track1_max_speed = track1['mean_point_speeds'][track1_approach_start_pose:track1_approach_stop_pose].max()
+
+        track2 = track_relationship['track2']
+        track2_approach_start_pose = approach_start_frame + track_relationship['track2_start_pose']
+        track2_approach_stop_pose = approach_stop_frame + track_relationship['track2_start_pose']
+        track2_speeds = track2['mean_point_speeds'][track2_approach_start_pose:track2_approach_stop_pose]
+        track2_max_speed = track2['mean_point_speeds'][track2_approach_start_pose:track2_approach_stop_pose].max()
+
+        # it's only considered an approach if one of the two mice are still
+        if track1_max_speed < maximum_still_speed_px_frame or track2_max_speed < maximum_still_speed_px_frame:
+
+            # the approaching animal is designated as the one with the higher maximum speed. We
+            # call the approacher "track_a" and the mouse being approached "track_b"
+            if track1_max_speed >= track2_max_speed:
+                track_a_id = track1['track_id']
+                track_a_centroid = np.array(track1['convex_hulls'][track1_approach_start_pose].centroid)
+
+                track_b_id = track2['track_id']
+                track_b_points = track2['points'][track2_approach_start_pose, ...]
+                track_b_point_mask = track2['point_masks'][track2_approach_start_pose, ...]
+            else:
+                track_a_id = track2['track_id']
+                track_a_centroid = np.array(track2['convex_hulls'][track2_approach_start_pose].centroid)
+
+                track_b_id = track1['track_id']
+                track_b_points = track1['points'][track1_approach_start_pose, ...]
+                track_b_point_mask = track1['point_masks'][track1_approach_start_pose, ...]
+
+            # We need to determine if it's an approach from front or back. To do this
+            # we simply determine if the approaching animal is closer to the other animals
+            # base of neck or base of tail.
+            if track_b_point_mask[BASE_TAIL_INDEX] and track_b_point_mask[BASE_NECK_INDEX]:
+                track_b_base_neck_xy = track_b_points[BASE_NECK_INDEX]
+                track_b_base_tail_xy = track_b_points[BASE_TAIL_INDEX]
+
+                dist_from_base_neck = np.linalg.norm(track_a_centroid - track_b_base_neck_xy)
+                dist_from_base_tail = np.linalg.norm(track_a_centroid - track_b_base_tail_xy)
+
+                if dist_from_base_tail < dist_from_base_neck:
+                    approach_type = 'APPROACH_FROM_BEHIND'
+                else:
+                    approach_type = 'APPROACH_FROM_FRONT'
+
+                yield {
+                    'approacher_track_id': int(track_a_id),
+                    'approached_track_id': int(track_b_id),
+                    'approach_type': approach_type,
+                    'start_frame': int(approach_start_frame + track_relationship['start_frame']),
+                    'stop_frame_exclu': int(approach_stop_frame + track_relationship['start_frame']),
+                }

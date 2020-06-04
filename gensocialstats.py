@@ -215,6 +215,28 @@ def detect_oral_genital_contact_events(track_relationships, social_config):
     )
 
 
+def detect_approach_events(track_relationships, social_config):
+    approach_config = social_config['behavior']['approach']
+
+    pose_config = social_config['pose']
+    fps = pose_config['frames_per_sec']
+    pixels_per_cm = pose_config['pixels_per_cm']
+
+    minimum_pre_approach_distance_px = approach_config['minimum_pre_approach_distance_cm'] * pixels_per_cm
+    maximum_arrival_distance_px = approach_config['maximum_arrival_distance_cm'] * pixels_per_cm
+    maximum_approach_duration_frames = approach_config['maximum_approach_duration_sec'] * fps
+    maximum_still_speed_px_frame = approach_config['maximum_still_speed_cm_sec'] * pixels_per_cm / fps
+
+    det_approach = functools.partial(
+            socialutil.detect_approach_intervals,
+            minimum_pre_approach_distance_px=minimum_pre_approach_distance_px,
+            maximum_arrival_distance_px=maximum_arrival_distance_px,
+            maximum_approach_duration_frames=maximum_approach_duration_frames,
+            maximum_still_speed_px_frame=maximum_still_speed_px_frame)
+
+    return itertools.chain.from_iterable(det_approach(t_rel) for t_rel in track_relationships)
+
+
 def distance_traveled_per_track(tracks, social_config):
     # extract some config stuff
     pose_config = social_config['pose']
@@ -240,10 +262,12 @@ def distance_traveled_per_track(tracks, social_config):
 
 
 def gen_social_stats(net_file_name, pose_file_name, social_config):
+    print('working on:', net_file_name)
     instance_tracks, duration_secs = gen_instance_tracks(pose_file_name, social_config)
     all_distance_traveled = list(distance_traveled_per_track(instance_tracks.values(), social_config))
     track_relationships = list(socialutil.calc_track_relationships(
         sorted(instance_tracks.values(), key=lambda track: track['start_frame'])))
+    all_approach = list(detect_approach_events(track_relationships, social_config))
     all_chases = list(detect_chase_events(track_relationships, social_config))
     all_oral_oral = list(detect_oral_oral_contact_events(track_relationships, social_config))
     all_oral_genital = list(detect_oral_genital_contact_events(track_relationships, social_config))
@@ -254,6 +278,7 @@ def gen_social_stats(net_file_name, pose_file_name, social_config):
         'chases': all_chases,
         'oral_oral_contact': all_oral_oral,
         'oral_genital_contact': all_oral_genital,
+        'approaches': all_approach,
         'duration_secs': duration_secs,
     }
 

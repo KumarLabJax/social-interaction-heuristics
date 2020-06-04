@@ -1,5 +1,12 @@
 behavior:
 
+  approach:
+
+    minimum_pre_approach_distance_cm: 5
+    maximum_arrival_distance_cm: 1
+    maximum_approach_duration_sec: 10
+    maximum_still_speed_cm_sec: 2
+
   chase:
 
     # For an interval to be called chase we require the mice to be
