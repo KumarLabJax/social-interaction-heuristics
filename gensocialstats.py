@@ -215,6 +215,50 @@ def detect_oral_genital_contact_events(track_relationships, social_config):
     )
 
 
+def detect_oral_ear_contact_events(track_relationships, social_config):
+
+    oral_ear_config = social_config['behavior']['oral_ear_contact']
+
+    pose_config = social_config['pose']
+    fps = pose_config['frames_per_sec']
+    pixels_per_cm = pose_config['pixels_per_cm']
+
+    maximum_distance_px = oral_ear_config['maximum_distance_cm'] * pixels_per_cm
+    minimum_duration_frames = oral_ear_config['minimum_duration_sec'] * fps
+    maximum_gap_frames = oral_ear_config['maximum_gap_sec'] * fps
+
+    approach_dist_px = oral_ear_config['approach_dist_cm'] * pixels_per_cm
+    approach_frames_before_contact = oral_ear_config['approach_secs_before_contact'] * fps
+
+    return itertools.chain(
+
+        detect_point_contact_events(
+            track_relationships,
+            socialutil.NOSE_INDEX, socialutil.LEFT_EAR_INDEX,
+            maximum_distance_px, minimum_duration_frames, maximum_gap_frames,
+            approach_dist_px, approach_frames_before_contact),
+
+        detect_point_contact_events(
+            track_relationships,
+            socialutil.NOSE_INDEX, socialutil.RIGHT_EAR_INDEX,
+            maximum_distance_px, minimum_duration_frames, maximum_gap_frames,
+            approach_dist_px, approach_frames_before_contact),
+
+        detect_point_contact_events(
+            track_relationships,
+            socialutil.LEFT_EAR_INDEX, socialutil.NOSE_INDEX,
+            maximum_distance_px, minimum_duration_frames, maximum_gap_frames,
+            approach_dist_px, approach_frames_before_contact),
+
+        detect_point_contact_events(
+            track_relationships,
+            socialutil.RIGHT_EAR_INDEX, socialutil.NOSE_INDEX,
+            maximum_distance_px, minimum_duration_frames, maximum_gap_frames,
+            approach_dist_px, approach_frames_before_contact),
+
+    )
+
+
 def detect_approach_events(track_relationships, social_config):
     approach_config = social_config['behavior']['approach']
 
@@ -235,6 +279,37 @@ def detect_approach_events(track_relationships, social_config):
             maximum_still_speed_px_frame=maximum_still_speed_px_frame)
 
     return itertools.chain.from_iterable(det_approach(t_rel) for t_rel in track_relationships)
+
+
+def detect_huddles(track_relationships, social_config):
+
+    huddle_config = social_config['behavior']['huddle']
+
+    pose_config = social_config['pose']
+    fps = pose_config['frames_per_sec']
+    pixels_per_cm = pose_config['pixels_per_cm']
+
+    maximum_distance_px = huddle_config['maximum_distance_cm'] * pixels_per_cm
+    minimum_duration_frames = huddle_config['minimum_duration_sec'] * fps
+    maximum_displacement_px = huddle_config['maximum_displacement_cm'] * pixels_per_cm
+    maximum_gap_merge_frames = huddle_config['maximum_gap_merge_sec'] * fps
+
+    for track_relationship in track_relationships:
+
+        curr_huddles = socialutil.detect_pairwise_huddles(
+                track_relationship,
+                maximum_distance_px,
+                minimum_duration_frames,
+                maximum_displacement_px,
+                maximum_gap_merge_frames)
+
+        for huddle_start, huddle_stop in curr_huddles:
+            yield {
+                'track1_id': int(track_relationship['track1']['track_id']),
+                'track2_id': int(track_relationship['track2']['track_id']),
+                'start_frame': int(huddle_start),
+                'stop_frame_exclu': int(huddle_stop),
+            }
 
 
 def distance_traveled_per_track(tracks, social_config):
@@ -267,10 +342,12 @@ def gen_social_stats(net_file_name, pose_file_name, social_config):
     all_distance_traveled = list(distance_traveled_per_track(instance_tracks.values(), social_config))
     track_relationships = list(socialutil.calc_track_relationships(
         sorted(instance_tracks.values(), key=lambda track: track['start_frame'])))
-    all_approach = list(detect_approach_events(track_relationships, social_config))
+    all_huddles = list(detect_huddles(track_relationships, social_config))
+    all_approaches = list(detect_approach_events(track_relationships, social_config))
     all_chases = list(detect_chase_events(track_relationships, social_config))
     all_oral_oral = list(detect_oral_oral_contact_events(track_relationships, social_config))
     all_oral_genital = list(detect_oral_genital_contact_events(track_relationships, social_config))
+    all_oral_ear = list(detect_oral_ear_contact_events(track_relationships, social_config))
 
     return {
         'network_filename': net_file_name,
@@ -278,7 +355,9 @@ def gen_social_stats(net_file_name, pose_file_name, social_config):
         'chases': all_chases,
         'oral_oral_contact': all_oral_oral,
         'oral_genital_contact': all_oral_genital,
-        'approaches': all_approach,
+        'oral_ear_contact': all_oral_ear,
+        'approaches': all_approaches,
+        'huddles': all_huddles,
         'duration_secs': duration_secs,
     }
 
@@ -330,6 +409,12 @@ def gen_all_social_stats(data_file_names, social_config, num_procs):
 #   --batch-file b6-vids.txt \
 #   --root-dir ~/smb/labshare/VideoData/MDS_Tests/B6J_3M_stranger_4day \
 #   --out-file B6_3M_stranger_4day-out-2020-04-22.yaml
+
+# python -u gensocialstats.py \
+#   --social-config social-config.yaml \
+#   --batch-file ucsd-vids.txt \
+#   --root-dir ~/smb/labshare \
+#   --out-file UCSD-out-2020-06-15.yaml
 
 def main():
     parser = argparse.ArgumentParser()

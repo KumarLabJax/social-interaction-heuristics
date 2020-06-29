@@ -1,5 +1,12 @@
 behavior:
 
+  huddle:
+
+    maximum_distance_cm: 1
+    minimum_duration_sec: 10
+    maximum_displacement_cm: 3
+    maximum_gap_merge_sec: 2
+
   approach:
 
     minimum_pre_approach_distance_cm: 5
@@ -57,6 +64,25 @@ behavior:
     # contact must occur within a given distance and must last
     # at least the specified duration
     maximum_distance_cm: 1.5
+    minimum_duration_sec: 0.25
+
+    # if contact tracks are seperated by a duration that is <=
+    # this value they will be joined together as a single chase
+    maximum_gap_sec: 0.5
+
+    # we look for an approach before contact to exclude spurrious
+    # events where mice are just huddled up together. So, we
+    # expect mice to move closer by a certain distance
+    # (approach_dist_cm) withing a certain time window
+    # before contact (approach_secs_before_contact)
+    approach_dist_cm: 5
+    approach_secs_before_contact: 5
+
+  oral_ear_contact:
+
+    # contact must occur within a given distance and must last
+    # at least the specified duration
+    maximum_distance_cm: 1.0
     minimum_duration_sec: 0.25
 
     # if contact tracks are seperated by a duration that is <=

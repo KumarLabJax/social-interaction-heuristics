@@ -108,6 +108,15 @@ class InteractionVideoClip(object):
 #       --root-dir "${share_root}" \
 #       --out-dir tempout3 \
 #       --allow-missing-video
+
+# share_root=/home/sheppk/smb/labshare
+# python -u rendersocialclips.py \
+#       --social-config social-config.yaml \
+#       --social-file-in UCSD-out-2020-06-15.yaml \
+#       --root-dir "${share_root}" \
+#       --out-dir CSD-out-2020-06-15-clips \
+#       --allow-missing-video
+
 def main():
 
     parser = argparse.ArgumentParser()
@@ -271,6 +280,32 @@ def main():
                     vid_clips[curr_approach.start_frame].append(curr_approach)
                 else:
                     vid_clips[curr_approach.start_frame] = [curr_approach]
+
+            for huddle_index, huddle in enumerate(video_doc['huddles']):
+                track1 = tracks[huddle['track1_id']]
+                track2 = tracks[huddle['track2_id']]
+
+                out_file_name = os.path.join(
+                    args.out_dir,
+                    escaped_net_id_root +
+                            '_huddle' +
+                            '_' + str(huddle_index) +
+                            '_' + str(huddle['track1_id']) +
+                            '_' + str(huddle['track2_id']) + '.avi',
+                )
+
+                curr_huddle = InteractionVideoClip(
+                    out_file_name,
+                    track1,
+                    track2,
+                    huddle['start_frame'],
+                    huddle['stop_frame_exclu'],
+                    exclude_points,
+                )
+                if curr_huddle.start_frame in vid_clips:
+                    vid_clips[curr_huddle.start_frame].append(curr_huddle)
+                else:
+                    vid_clips[curr_huddle.start_frame] = [curr_huddle]
 
             if vid_clips:
                 with imageio.get_reader(in_video_path) as video_reader:

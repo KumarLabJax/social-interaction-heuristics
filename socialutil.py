@@ -242,6 +242,7 @@ def merge_intervals(intervals, max_gap):
     if prev_start is not None:
         yield prev_start, prev_stop
 
+
 def calculate_point_velocities(track):
     """
     calculates velocities (and speeds) for all of the pose points along the track. These
@@ -294,6 +295,7 @@ def calculate_convex_hulls(track):
     track_points = track['points']
     track_point_masks = track['point_masks']
     track['convex_hulls'] = list(gen_convex_hulls(track_points, track_point_masks))
+    track['centroids'] = np.stack([np.array(ch.centroid) for ch in track['convex_hulls']])
 
 
 def gen_convex_hulls(points, point_masks):
@@ -302,17 +304,12 @@ def gen_convex_hulls(points, point_masks):
         curr_mask = point_masks[pose_index, :-2]
         curr_shape = MultiPoint(curr_points[curr_mask, :]).convex_hull
 
-        # curr_points = points[pose_index, point_masks[pose_index], :]
-        # curr_shape = MultiPoint(curr_points).convex_hull
-
         yield curr_shape
 
 
-def calc_centroid_offset_unit_vectors(shapes1, shapes2):
+def calc_centroid_offset_unit_vectors(centroids1, centroids2):
 
-    shape_centroids1 = np.stack([np.array(shape.centroid) for shape in shapes1])
-    shape_centroids2 = np.stack([np.array(shape.centroid) for shape in shapes2])
-    centroid_offsets = shape_centroids2 - shape_centroids1
+    centroid_offsets = centroids2 - centroids1
     centroid_offset_norms = np.linalg.norm(centroid_offsets, axis=-1)
     centroid_offset_unit_vectors = centroid_offsets / centroid_offset_norms[..., np.newaxis]
 
@@ -349,17 +346,19 @@ def calc_track_relationship(track1, track2):
         pose_start1 = overlap_start_frame - track1['start_frame']
         pose_stop1 = pose_start1 + overlap_length
         overlap_hulls1 = track1['convex_hulls'][pose_start1:pose_stop1]
+        overlap_centroids1 = track1['centroids'][pose_start1:pose_stop1, :]
 
         pose_start2 = overlap_start_frame - track2['start_frame']
         pose_stop2 = pose_start2 + overlap_length
         overlap_hulls2 = track2['convex_hulls'][pose_start2:pose_stop2]
+        overlap_centroids2 = track2['centroids'][pose_start2:pose_stop2, :]
 
         track_distances = np.array([
             shape1.distance(shape2) for shape1, shape2
             in zip(overlap_hulls1, overlap_hulls2)
         ])
 
-        track_offset_unit_vectors = calc_centroid_offset_unit_vectors(overlap_hulls1, overlap_hulls2)
+        track_offset_unit_vectors = calc_centroid_offset_unit_vectors(overlap_centroids1, overlap_centroids2)
 
         track_relationship = {
             'track1': track1,
@@ -489,7 +488,7 @@ def norm_of_deviation(theta_deg):
 
 def calc_track_distance_traveled(track, still_displacement_threshold_px, still_time_threshold_frames):
 
-    centroids = np.stack([np.array(ch.centroid) for ch in track['convex_hulls']])
+    centroids = track['centroids'] #np.stack([np.array(ch.centroid) for ch in track['convex_hulls']])
     centroid_velocities = np.gradient(centroids, axis=-2)
     centroid_speeds = np.linalg.norm(centroid_velocities, axis=-1)
 
@@ -516,6 +515,76 @@ def calc_track_distance_traveled(track, still_displacement_threshold_px, still_t
     centroid_speeds[centroid_still] = 0
 
     return centroid_speeds.sum()
+
+
+def _split_interval_by_displacement(pose_interval, track_relationship, maximum_displacement_px):
+    interval_start, interval_stop = pose_interval
+    interval_size = interval_stop - interval_start
+
+    track1 = track_relationship['track1']
+    track1_start_pose = track_relationship['track1_start_pose']
+    track1_centroids = track1['centroids'][interval_start + track1_start_pose : interval_stop + track1_start_pose, :]
+
+    track2 = track_relationship['track2']
+    track2_start_pose = track_relationship['track2_start_pose']
+    track2_centroids = track2['centroids'][interval_start + track2_start_pose : interval_stop + track2_start_pose, :]
+
+    curr_track1_start_pos = track1_centroids[0, :]
+    curr_track2_start_pos = track2_centroids[0, :]
+    curr_start_offset = 0
+    for interval_offset in range(1, interval_size):
+        curr_track1_stop_pos = track1_centroids[interval_offset, :]
+        curr_track2_stop_pos = track2_centroids[interval_offset, :]
+
+        if (np.linalg.norm(curr_track1_stop_pos - curr_track1_start_pos) > maximum_displacement_px
+            or np.linalg.norm(curr_track2_stop_pos - curr_track2_start_pos) > maximum_displacement_px):
+
+            # we exceeded the distance so break up the interval here
+            yield curr_start_offset + interval_start, interval_offset + interval_start
+
+            # and reinitialize the start position data for the next interval
+            curr_track1_start_pos = curr_track1_stop_pos
+            curr_track2_start_pos = curr_track2_stop_pos
+            curr_start_offset = interval_offset
+
+    if curr_start_offset < interval_size - 1:
+        yield curr_start_offset + interval_start, interval_stop
+
+
+def detect_pairwise_huddles(
+        track_relationship,
+        maximum_distance_px,
+        minimum_duration_frames,
+        maximum_displacement_px,
+        maximum_gap_merge_frames):
+
+    huddle_candidate_frames = track_relationship['track_distances'] <= maximum_distance_px
+    track1_start_pose = track_relationship['track1_start_pose']
+    track2_start_pose = track_relationship['track2_start_pose']
+
+    # huddle candidates based on proximity
+    huddle_intervals = find_intervals(huddle_candidate_frames, True)
+
+    # break up candidate intervals where there is too much movement
+    huddle_intervals = itertools.chain.from_iterable(
+        _split_interval_by_displacement(hi, track_relationship, maximum_displacement_px)
+        for hi in huddle_intervals
+    )
+
+    # remove intervals that are too short-lived
+    huddle_intervals = (
+        hi for hi in huddle_intervals
+        if hi[1] - hi[0] >= minimum_duration_frames
+    )
+
+    # merge huddles that are close enough in time
+    huddle_intervals = merge_intervals(huddle_intervals, maximum_gap_merge_frames)
+
+    # move from track-relationship-relative, to absolute video frames
+    relstart = track_relationship['start_frame']
+    huddle_intervals = ((start + relstart, stop + relstart) for start, stop in huddle_intervals)
+
+    return huddle_intervals
 
 
 def _detect_approach_intervals(
@@ -584,14 +653,14 @@ def detect_approach_intervals(
             # call the approacher "track_a" and the mouse being approached "track_b"
             if track1_max_speed >= track2_max_speed:
                 track_a_id = track1['track_id']
-                track_a_centroid = np.array(track1['convex_hulls'][track1_approach_start_pose].centroid)
+                track_a_centroid = track1['centroids'][track1_approach_start_pose, :] #np.array(track1['convex_hulls'][track1_approach_start_pose].centroid)
 
                 track_b_id = track2['track_id']
                 track_b_points = track2['points'][track2_approach_start_pose, ...]
                 track_b_point_mask = track2['point_masks'][track2_approach_start_pose, ...]
             else:
                 track_a_id = track2['track_id']
-                track_a_centroid = np.array(track2['convex_hulls'][track2_approach_start_pose].centroid)
+                track_a_centroid = track2['centroids'][track2_approach_start_pose, :] #np.array(track2['convex_hulls'][track2_approach_start_pose].centroid)
 
                 track_b_id = track1['track_id']
                 track_b_points = track1['points'][track1_approach_start_pose, ...]
