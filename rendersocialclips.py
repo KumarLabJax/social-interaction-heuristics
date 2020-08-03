@@ -129,7 +129,7 @@ def main():
 
     parser.add_argument(
         '--social-file-in',
-        help='the HDF5 file with social behavior inference',
+        help='the YAML file with social behavior inference',
         required=True,
     )
 

@@ -6,3 +6,7 @@ __pycache__/
 bad-oo-contact/
 good-oo-contact/
 .ipynb_checkpoints/
+
+UCSD-out-*
+
+._*
