@@ -2,7 +2,6 @@ import argparse
 import csv
 import functools
 import h5py
-import imageio
 import itertools
 import multiprocessing as mp
 import numpy as np
@@ -56,7 +55,7 @@ def gen_instance_tracks(data_file_name, social_config):
             socialutil.calculate_point_velocities(track)
             socialutil.calculate_convex_hulls(track)
 
-        return track_dict, len(all_instance_count) / fps
+        return track_dict, len(all_instance_count)
 
 
 def detect_chase_events(track_relationships, social_config):
@@ -338,7 +337,7 @@ def distance_traveled_per_track(tracks, social_config):
 
 def gen_social_stats(net_file_name, pose_file_name, social_config):
     print('working on:', net_file_name)
-    instance_tracks, duration_secs = gen_instance_tracks(pose_file_name, social_config)
+    instance_tracks, frame_count = gen_instance_tracks(pose_file_name, social_config)
     all_distance_traveled = list(distance_traveled_per_track(instance_tracks.values(), social_config))
     track_relationships = list(socialutil.calc_track_relationships(
         sorted(instance_tracks.values(), key=lambda track: track['start_frame'])))
@@ -358,7 +357,7 @@ def gen_social_stats(net_file_name, pose_file_name, social_config):
         'oral_ear_contact': all_oral_ear,
         'approaches': all_approaches,
         'huddles': all_huddles,
-        'duration_secs': duration_secs,
+        'frame_count': frame_count,
     }
 
 
@@ -415,6 +414,12 @@ def gen_all_social_stats(data_file_names, social_config, num_procs):
 #   --batch-file ucsd-vids.txt \
 #   --root-dir ~/smb/labshare \
 #   --out-file UCSD-out-2020-06-15.yaml
+
+# python -u gensocialstats.py \
+#   --social-config social-config.yaml \
+#   --batch-file ucsd-vids-2020-08-04.txt \
+#   --root-dir ~/smb/labshare \
+#   --out-file UCSD-out-2020-08-04.yaml
 
 def main():
     parser = argparse.ArgumentParser()
