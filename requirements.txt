@@ -1,3 +1,9 @@
 h5py
 numpy
 PyYaml
+
+# jupyter notebook requirements
+notebook
+pandas
+plotnine
+shapely

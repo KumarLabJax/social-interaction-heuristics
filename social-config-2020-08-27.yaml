@@ -1,0 +1,157 @@
+behavior:
+
+  huddle:
+
+    # Two letter abbreviation: HU
+
+    # For an interval to be called a huddle we require animals
+    # to be in close proximity to eachother (maximum_distance_cm)
+    # for a specified minimum duration (minimum_duration_sec)
+    # and with a maximum threshold for how far the animals are
+    # allowed to move (maximum_displacement_cm).
+
+    maximum_distance_cm: 1.5
+    minimum_duration_sec: 10
+    maximum_displacement_cm: 3
+
+    # if huddle intervals are separated by a duration that is <=
+    # this value they will be joined together as a single huddle
+    maximum_gap_merge_sec: 2
+
+  approach:
+
+    # Two letter abbreviation: AP
+
+    # For detecting approach events we require that mice start at
+    # a minimum separation distance (you can't approach if you're
+    # starting out close together)
+    minimum_pre_approach_distance_cm: 5
+
+    # Two animals must end up at least this close together for
+    # us to call an approach.
+    maximum_arrival_distance_cm: 2
+
+    # If it takes longer than this for an approacher
+    # to close the gap between the pre-approach distance
+    # and the arrival distance we won't call it an approach.
+    maximum_approach_duration_sec: 10
+
+    # The mouse being approach must be "still" which we define
+    # as not exceeding the speed given in maximum_still_speed_cm_sec
+    maximum_still_speed_cm_sec: 3
+
+  chase:
+
+    # Two letter abbreviation: CH
+
+    # For an interval to be called chase we require the mice to be
+    # within a given distance of eachother, traveling at least as
+    # fast as the given speed and this condition must last at least
+    # for the given duration.
+    maximum_distance_cm: 5
+    minimum_speed_cm_sec: 15
+    minimum_duration_sec: 1
+
+    # if chase tracks are separated by a duration that is <=
+    # this value they will be joined together as a single chase
+    maximum_gap_sec: 0.5
+
+    # in a chase event the chaser is headed toward the animal being
+    # chased. This value determines how much deviation is allowed in
+    # chase direction when determining a chase event.
+    maximum_chase_direction_deviation_deg: 30
+
+    # For a continuous chase event this value (in a 0-1 range) determines
+    # the proportion of frames that need to fall within the
+    # direction deviation threshold specified above. If this
+    # proportion of frames is not met the interval is not
+    # labeled chase.
+    minimum_chase_direction_agreement: 0.7
+
+  oral_oral_contact:
+
+    # Two letter abbreviation: OO
+
+    # contact must occur within a given distance and must last
+    # at least the specified duration
+    maximum_distance_cm: 1.0
+    minimum_duration_sec: 0.1
+
+    # if contact tracks are separated by a duration that is <=
+    # this value they will be joined together as a single chase
+    maximum_gap_sec: 0.5
+
+    # we look for an approach before contact to exclude spurious
+    # events where mice are just huddled up together. So, we
+    # expect mice to move closer by a certain distance
+    # (approach_dist_cm) within a certain time window
+    # before contact (approach_secs_before_contact)
+    approach_dist_cm: 3
+    approach_secs_before_contact: 15
+
+  oral_genital_contact:
+
+    # Two letter abbreviation: OG
+
+    # contact must occur within a given distance and must last
+    # at least the specified duration
+    maximum_distance_cm: 1.5
+    minimum_duration_sec: 0.1
+
+    # if contact tracks are separated by a duration that is <=
+    # this value they will be joined together as a single chase
+    maximum_gap_sec: 0.5
+
+    # we look for an approach before contact to exclude spurious
+    # events where mice are just huddled up together. So, we
+    # expect mice to move closer by a certain distance
+    # (approach_dist_cm) within a certain time window
+    # before contact (approach_secs_before_contact)
+    approach_dist_cm: 3
+    approach_secs_before_contact: 15
+
+  oral_ear_contact:
+
+    # Two letter abbreviation: OE
+
+    # contact must occur within a given distance and must last
+    # at least the specified duration
+    maximum_distance_cm: 1.0
+    minimum_duration_sec: 0.1
+
+    # if contact tracks are separated by a duration that is <=
+    # this value they will be joined together as a single chase
+    maximum_gap_sec: 0.5
+
+    # we look for an approach before contact to exclude spurious
+    # events where mice are just huddled up together. So, we
+    # expect mice to move closer by a certain distance
+    # (approach_dist_cm) within a certain time window
+    # before contact (approach_secs_before_contact)
+    approach_dist_cm: 3
+    approach_secs_before_contact: 15
+
+  distance_traveled:
+
+    # the "still" parameters determine that an animal is still
+    # if its displacement is less than the given distance
+    # within the given time window. This prevents position jitter
+    # from contributing to the distance traveled metric.
+    still_displacement_threshold_cm: 3
+    still_time_threshold_sec: 3
+
+pose:
+  frames_per_sec: 30
+  min_track_duration_sec: 3
+  pixels_per_cm: 10
+
+  interpolation:
+
+    # The maximum distance traveled allowed for point being interpolated.
+    # Interpolation won't be done for any point exceeding this threshold.
+    maximum_point_distance_cm: 3
+
+    # The maximum distance traveled allowed for the mean of all points in
+    # an interpolation interval. Interpolation won't be done for any interval
+    # exceeding this threshold.
+    maximum_mean_point_distance_cm: 6

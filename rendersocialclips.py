@@ -1,7 +1,9 @@
 import argparse
 from collections import deque
+import cv2
 import h5py
 import imageio
+import multiprocessing as mp
 import numpy as np
 import os
 import urllib.parse as urlparse
@@ -18,18 +20,6 @@ CHASER_CHASE_COLOR = (255, 0, 0)
 CHASEE_NON_CHASE_COLOR = (0, 255 // 2, 0)
 CHASEE_CHASE_COLOR = (0, 255, 0)
 
-# # these colors
-# TRACK_INSTANCE_COLORS = [
-#     (141, 211, 199),
-#     (255, 255, 179),
-#     (190, 186, 218),
-#     (251, 128, 114),
-#     (128, 177, 211),
-#     (253, 180, 98),
-#     (179, 222, 105),
-#     (252, 205, 229),
-# ]
-
 # color palette from https://colorbrewer2.org/?type=qualitative&scheme=Accent&n=7
 TRACK_INSTANCE_COLORS = [
     # (127,201,127),
@@ -45,11 +35,53 @@ TRACK_INSTANCE_COLORS = [
 BEHAVIOR_NAMES = [
     'oral_genital_contact',
     'oral_oral_contact',
+    'oral_ear_contact',
     'chases',
     'approaches',
     'huddles',
 ]
 
+
+BEHAVIOR_ANNOTATION_INFO = {
+    'oral_genital_contact': {
+        'horizontal_offset_px': 0,
+        'vertical_offset_px': 30,
+        'TEXT': 'OG',
+    },
+    'oral_oral_contact': {
+        'horizontal_offset_px': 300,
+        'vertical_offset_px': 30,
+        'TEXT': 'OO',
+    },
+    'oral_ear_contact': {
+        'horizontal_offset_px': 600,
+        'vertical_offset_px': 30,
+        'TEXT': 'OE',
+    },
+    'chases': {
+        'horizontal_offset_px': 0,
+        'vertical_offset_px': 60,
+        'TEXT': 'CH',
+    },
+    'approaches': {
+        'horizontal_offset_px': 300,
+        'vertical_offset_px': 60,
+        'TEXT': 'AP',
+    },
+    'huddles': {
+        'horizontal_offset_px': 600,
+        'vertical_offset_px': 60,
+        'TEXT': 'HU',
+    },
+}
+
+
+VIDEO_ANNOTATION_PADDING_PX = 112
+
+TEXT_HEIGHT_PX = 22
+TEXT_WIDTH_PX = 44
+
+FRAME_NUM_VERTICAL_OFFSET_PX = 90
 
 def render_overlay(frame, pose, pose_mask, exclude_points, color):
 
@@ -101,39 +133,39 @@ class InteractionVideoClip(object):
     def stop_frame_exclu(self):
         return self.interaction_stop_frame_exclu + self.buffer_frames
 
-    def process_frame(self, behavior_name, frame, curr_frame_index):
+    # def process_frame(self, behavior_name, frame, curr_frame_index):
 
-        if self.behavior_name is None or self.behavior_name == behavior_name:
+    #     if self.behavior_name is None or self.behavior_name == behavior_name:
 
-            if self.start_frame <= curr_frame_index < self.stop_frame_exclu:
+    #         if self.start_frame <= curr_frame_index < self.stop_frame_exclu:
 
-                if self.behavior_name is not None:
-                    interaction_active = (
-                        self.interaction_start_frame <= curr_frame_index < self.interaction_stop_frame_exclu
-                    )
-                    pose1, pose_mask1 = frame_pose(self.track1, curr_frame_index)
-                    if pose1 is not None:
-                        render_overlay(
-                            frame,
-                            pose1, pose_mask1,
-                            self.exclude_points,
-                            CHASER_CHASE_COLOR if interaction_active else CHASER_NON_CHASE_COLOR)
+    #             if self.behavior_name is not None:
+    #                 interaction_active = (
+    #                     self.interaction_start_frame <= curr_frame_index < self.interaction_stop_frame_exclu
+    #                 )
+    #                 pose1, pose_mask1 = frame_pose(self.track1, curr_frame_index)
+    #                 if pose1 is not None:
+    #                     render_overlay(
+    #                         frame,
+    #                         pose1, pose_mask1,
+    #                         self.exclude_points,
+    #                         CHASER_CHASE_COLOR if interaction_active else CHASER_NON_CHASE_COLOR)
 
-                    pose2, pose_mask2 = frame_pose(self.track2, curr_frame_index)
-                    if pose2 is not None:
-                        render_overlay(
-                            frame,
-                            pose2, pose_mask2,
-                            self.exclude_points,
-                            CHASEE_CHASE_COLOR if interaction_active else CHASEE_NON_CHASE_COLOR)
+    #                 pose2, pose_mask2 = frame_pose(self.track2, curr_frame_index)
+    #                 if pose2 is not None:
+    #                     render_overlay(
+    #                         frame,
+    #                         pose2, pose_mask2,
+    #                         self.exclude_points,
+    #                         CHASEE_CHASE_COLOR if interaction_active else CHASEE_NON_CHASE_COLOR)
 
-                return True
+    #             return True
 
-            else:
-                return False
+    #         else:
+    #             return False
 
-        else:
-            return False
+    #     else:
+    #         return False
 
 
 # share_root=/media/sheppk/TOSHIBA\ EXT/cached-data/BTBR_3M_stranger_4day
@@ -160,6 +192,25 @@ class InteractionVideoClip(object):
 #       --out-dir UCSD-out-2020-08-04-clips \
 #       --allow-missing-video \
 #       --proximity-threshold-cm 3
+
+# share_root=/home/sheppk/smb/labshare
+# python -u rendersocialclips.py \
+#       --social-config social-config.yaml \
+#       --social-file-in UCSD-out-2020-08-04.yaml \
+#       --root-dir "${share_root}" \
+#       --out-dir UCSD-out-2020-08-24-clips \
+#       --allow-missing-video \
+#       --proximity-threshold-cm 3
+
+# share_root=/home/sheppk/smb/labshare
+# python -u rendersocialclips.py \
+#       --social-config social-config.yaml \
+#       --social-file-in UCSD-out-2020-08-04.yaml \
+#       --root-dir "${share_root}" \
+#       --out-dir UCSD-out-2020-08-24-clips \
+#       --allow-missing-video \
+#       --proximity-threshold-cm 3 \
+#       --print-frame-count
 
 def main():
 
@@ -226,7 +277,7 @@ def main():
 
             if args.allow_missing_video:
                 if not os.path.exists(in_video_path):
-                    # print('WARNING: ' + in_video_path + ' does not exist')
+                    print('WARNING: ' + in_video_path + ' does not exist')
                     continue
             else:
                 assert os.path.exists(in_video_path), in_video_path + ' does not exist'
@@ -237,7 +288,7 @@ def main():
             pose_file_name = file_no_ext + '_pose_est_v3.h5'
             assert os.path.exists(pose_file_name)
 
-            interaction_clips = []
+            behavior_intervals = []
 
             tracks, frame_count = gensocialstats.gen_instance_tracks(pose_file_name, social_config)
             sorted_track_list = sorted(tracks.values(), key=lambda track: track['start_frame'])
@@ -278,7 +329,7 @@ def main():
                 proximity_intervals = socialutil.find_intervals(proximity_thresh_arr, True)
                 proximity_intervals = socialutil.merge_intervals(proximity_intervals, 30 * 5)
                 for pi_start, pi_stop in proximity_intervals:
-                    interaction_clips.append(InteractionVideoClip(
+                    behavior_intervals.append(InteractionVideoClip(
                         None,
                         None,
                         None,
@@ -299,7 +350,7 @@ def main():
                     og_contact['stop_frame_exclu'],
                     exclude_points,
                 )
-                interaction_clips.append(curr_contact)
+                behavior_intervals.append(curr_contact)
 
             for oo_contact_index, oo_contact in enumerate(video_doc['oral_oral_contact']):
                 track1 = tracks[oo_contact['track1_id']]
@@ -313,7 +364,21 @@ def main():
                     oo_contact['stop_frame_exclu'],
                     exclude_points,
                 )
-                interaction_clips.append(curr_contact)
+                behavior_intervals.append(curr_contact)
+
+            for oe_contact_index, oe_contact in enumerate(video_doc['oral_ear_contact']):
+                track1 = tracks[oe_contact['track1_id']]
+                track2 = tracks[oe_contact['track2_id']]
+
+                curr_contact = InteractionVideoClip(
+                    'oral_ear_contact',
+                    track1,
+                    track2,
+                    oe_contact['start_frame'],
+                    oe_contact['stop_frame_exclu'],
+                    exclude_points,
+                )
+                behavior_intervals.append(curr_contact)
 
             for chase_index, chase in enumerate(video_doc['chases']):
                 chaser_track = tracks[chase['chaser_track_id']]
@@ -327,7 +392,7 @@ def main():
                     chase['stop_frame_exclu'],
                     exclude_points,
                 )
-                interaction_clips.append(curr_chase)
+                behavior_intervals.append(curr_chase)
 
             for approach_index, approach in enumerate(video_doc['approaches']):
                 approacher_track = tracks[approach['approacher_track_id']]
@@ -341,7 +406,7 @@ def main():
                     approach['stop_frame_exclu'],
                     exclude_points,
                 )
-                interaction_clips.append(curr_approach)
+                behavior_intervals.append(curr_approach)
 
             for huddle_index, huddle in enumerate(video_doc['huddles']):
                 track1 = tracks[huddle['track1_id']]
@@ -355,45 +420,95 @@ def main():
                     huddle['stop_frame_exclu'],
                     exclude_points,
                 )
-                interaction_clips.append(curr_huddle)
+                behavior_intervals.append(curr_huddle)
 
-            if interaction_clips:
-                def vid_out_path(behavior_name):
-                    return os.path.join(
+            if behavior_intervals:
+                out_video_path = os.path.join(
                         args.out_dir,
-                        escaped_net_id_root + '_' + behavior_name + '.avi',
+                        escaped_net_id_root + '_social.avi',
                     )
-                vid_writers = {
-                    behavior_name: imageio.get_writer(vid_out_path(behavior_name), fps=30)
-                    for behavior_name in BEHAVIOR_NAMES
-                }
 
-                with imageio.get_reader(in_video_path) as video_reader:
-                    # active_clips = []
-                    for frame_num, frame in enumerate(video_reader):
-                        for bn in BEHAVIOR_NAMES:
-                            frame_copy = frame.copy()
+                with imageio.get_reader(in_video_path) as video_reader, \
+                     imageio.get_writer(out_video_path, fps=30) as video_writer:
+                    for frame_index, frame in enumerate(video_reader):
+                        frame_copy = frame.copy()
+                        for track in sorted_track_list:
+                            pose, pose_mask = frame_pose(track, frame_index)
+                            if pose is not None:
+                                render_overlay(
+                                    frame_copy,
+                                    pose, pose_mask,
+                                    exclude_points,
+                                    track_color_dict[track['track_id']])
 
-                            for track in sorted_track_list:
-                                pose, pose_mask = frame_pose(track, frame_num)
-                                if pose is not None:
-                                    render_overlay(
-                                        frame_copy,
-                                        pose, pose_mask,
-                                        exclude_points,
-                                        track_color_dict[track['track_id']])
+                        frame_row_count, frame_col_count, frame_color_count = frame_copy.shape
+                        annotation_padding = np.zeros((VIDEO_ANNOTATION_PADDING_PX, frame_col_count, frame_color_count), dtype=np.uint8)
+                        frame_copy = np.append(frame_copy, annotation_padding, axis=0)
 
-                            any_interaction = False
-                            for ic in interaction_clips:
-                                interaction_valid = ic.process_frame(bn, frame_copy, frame_num)
-                                if interaction_valid:
-                                    any_interaction = True
+                        write_frame = annotate_frame(frame_copy, frame_index, behavior_intervals)
+                        if write_frame:
+                            video_writer.append_data(frame_copy)
 
-                            if any_interaction:
-                                vid_writers[bn].append_data(frame_copy)
 
-                for writer in vid_writers.values():
-                    writer.close()
+def annotate_frame(frame, frame_index, behavior_intervals):
+    render_frame = False
+
+    frame_row_count, frame_col_count, frame_color_count = frame.shape
+
+    annotation_start_row = frame_row_count - VIDEO_ANNOTATION_PADDING_PX
+
+    for bi in behavior_intervals:
+        if bi.start_frame <= frame_index < bi.stop_frame_exclu:
+
+            if bi.behavior_name is not None:
+                interaction_active = (
+                    bi.interaction_start_frame <= frame_index < bi.interaction_stop_frame_exclu
+                )
+
+                anno_info = BEHAVIOR_ANNOTATION_INFO[bi.behavior_name]
+                bn_x = anno_info['horizontal_offset_px']
+                bn_y = annotation_start_row + anno_info['vertical_offset_px']
+                cv2.rectangle(
+                    frame,
+                    (bn_x + TEXT_WIDTH_PX, bn_y - TEXT_HEIGHT_PX),
+                    (bn_x + TEXT_WIDTH_PX + TEXT_HEIGHT_PX, bn_y),
+                    (255, 255, 255),
+                    cv2.FILLED,
+                )
+
+            render_frame = True
+
+    if render_frame:
+        cv2.putText(
+            frame,
+            'Frame #: {}'.format(frame_index + 1),
+            (0, annotation_start_row + FRAME_NUM_VERTICAL_OFFSET_PX),
+            cv2.FONT_HERSHEY_COMPLEX,
+            1.0,
+            (255, 255, 255),
+        )
+
+        for bn in BEHAVIOR_NAMES:
+            anno_info = BEHAVIOR_ANNOTATION_INFO[bn]
+            bn_x = anno_info['horizontal_offset_px']
+            bn_y = annotation_start_row + anno_info['vertical_offset_px']
+            cv2.putText(
+                frame,
+                anno_info['TEXT'],
+                (bn_x, bn_y),
+                cv2.FONT_HERSHEY_COMPLEX,
+                1.0,
+                (255, 255, 255),
+            )
+            cv2.rectangle(
+                frame,
+                (bn_x + TEXT_WIDTH_PX, bn_y - TEXT_HEIGHT_PX),
+                (bn_x + TEXT_WIDTH_PX + TEXT_HEIGHT_PX, bn_y),
+                (255, 255, 255),
+                1,
+            )
+
+    return render_frame
 
 
 if __name__ == '__main__':

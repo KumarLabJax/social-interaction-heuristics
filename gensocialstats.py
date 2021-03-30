@@ -362,8 +362,13 @@ def gen_social_stats(net_file_name, pose_file_name, social_config):
 
 
 def _gen_social_stats(data_file_tuple, social_config):
+
     net_file_name, pose_file_name = data_file_tuple
-    return gen_social_stats(net_file_name, pose_file_name, social_config)
+    try:
+        return gen_social_stats(net_file_name, pose_file_name, social_config)
+    except Exception:
+        print('ERROR: FAILED TO PROCESS', net_file_name, 'and', pose_file_name)
+        return None
 
 
 def gen_all_social_stats(data_file_names, social_config, num_procs):
@@ -420,6 +425,94 @@ def gen_all_social_stats(data_file_names, social_config, num_procs):
 #   --batch-file ucsd-vids-2020-08-04.txt \
 #   --root-dir ~/smb/labshare \
 #   --out-file UCSD-out-2020-08-04.yaml
+
+# python -u gensocialstats.py \
+#   --social-config social-config-2020-08-27.yaml \
+#   --batch-file ucsd-vids-2020-08-04.txt \
+#   --root-dir ~/smb/labshare \
+#   --out-file UCSD-out-2020-08-28.yaml
+
+# BXD:
+#   python -u gensocialstats.py \
+#       --social-config social-config-2020-08-27.yaml \
+#       --batch-file bxd-batch-2020-08-28.txt\
+#       --root-dir ~/smb/labshare \
+#       --out-file bxd-out-2020-08-28.yaml
+
+
+# B2B vs CBAX2B - using B6J vs BTBR Three Male Stranger, Four Day Social Interaction
+#   ./scripts/find-b2b-b6-vids.sh > ./data/B2B_B6_3M_stranger_4day-out-2020-11-12-batch.txt
+#   share_root='/run/user/1000/gvfs/smb-share:server=bht2stor.jax.org,share=vkumar'
+#   python -u gensocialstats.py \
+#       --num-procs 3 \
+#       --social-config social-config-2020-08-27.yaml \
+#       --batch-file ./data/B2B_B6_3M_stranger_4day-out-2020-11-12-batch.txt \
+#       --root-dir "${share_root}" \
+#       --out-file ./data/B2B_B6_3M_stranger_4day-out-2020-11-12-social.yaml
+#   ./scripts/find-cbax2-b6-vids.sh > ./data/CBAX2_B6_3M_stranger_4day-out-2020-11-12-batch.txt
+#   share_root='/run/user/1000/gvfs/smb-share:server=bht2stor.jax.org,share=vkumar/VideoData/MDS_Tests/B6J_3M_stranger_4day'
+#   python -u gensocialstats.py \
+#       --num-procs 3 \
+#       --social-config social-config-2020-08-27.yaml \
+#       --batch-file ./data/CBAX2_B6_3M_stranger_4day-out-2020-11-12-batch.txt \
+#       --root-dir "${share_root}" \
+#       --out-file ./data/CBAX2_B6_3M_stranger_4day-out-2020-11-12-social.yaml
+#   ./scripts/find-b2b-btbr-vids.sh > ./data/B2B_BTBR_3M_stranger_4day-out-2020-11-12-batch.txt
+#   ./scripts/find-cbax2-btbr-vids.sh > ./data/CBAX2_BTBR_3M_stranger_4day-out-2020-11-12-batch.txt
+
+# WORKING TO RECOVER MISSING POSES
+#   source ~/venvs/ofp/bin/activate
+#   share_root='/run/user/1000/gvfs/smb-share:server=bht2stor.jax.org,share=vkumar'
+#   python -u ~/projects/open-field-pipeline/local/postprocverify.py --batch-file data/B2B_ALL_3M_stranger_4day-out-2020-11-12-batch.txt --root "${share_root}" --suffix '_pose_est_v3.h5' > data/B2B_MISSING_3M_stranger_4day-out-2020-11-12-batch.txt
+#   python ~/projects/open-field-pipeline/local/verifybatch.py --batch-file data/B2B_MISSING_3M_stranger_4day-out-2020-11-12-batch.txt --src-root "${share_root}" --dest-root ~/sshfs/winterfastscratch/B2B_MISSING_3M_stranger_4day-2020-11-12
+
+# Reboot: B2B vs CBAX2B - using B6J vs BTBR Three Male Stranger, Four Day Social Interaction
+#
+#   ./scripts/find-b2b-b6-poses.sh > ./data/B2B_B6_3M_stranger_4day-out-2020-12-09-batch.txt
+#   share_root='/run/user/1000/gvfs/smb-share:server=bht2stor.jax.org,share=vkumar'
+#   python -u gensocialstats.py \
+#       --num-procs 3 \
+#       --social-config social-config-2020-08-27.yaml \
+#       --batch-file ./data/B2B_B6_3M_stranger_4day-out-2020-12-09-batch.txt \
+#       --root-dir "${share_root}" \
+#       --out-file ./data/B2B_B6_3M_stranger_4day-out-2020-12-09-social.yaml
+#
+#   ./scripts/find-cbax2-b6-poses.sh > ./data/CBAX2_B6_3M_stranger_4day-out-2020-12-09-batch.txt
+#   share_root='/run/user/1000/gvfs/smb-share:server=bht2stor.jax.org,share=vkumar/VideoData/MDS_Tests/B6J_3M_stranger_4day'
+#   python -u gensocialstats.py \
+#       --num-procs 3 \
+#       --social-config social-config-2020-08-27.yaml \
+#       --batch-file ./data/CBAX2_B6_3M_stranger_4day-out-2020-12-09-batch.txt \
+#       --root-dir "${share_root}" \
+#       --out-file ./data/CBAX2_B6_3M_stranger_4day-out-2020-12-09-social.yaml
+#
+#   ./scripts/find-b2b-btbr-poses.sh > ./data/B2B_BTBR_3M_stranger_4day-out-2020-12-09-batch.txt
+#   share_root='/run/user/1000/gvfs/smb-share:server=bht2stor.jax.org,share=vkumar'
+#   python -u gensocialstats.py \
+#       --num-procs 3 \
+#       --social-config social-config-2020-08-27.yaml \
+#       --batch-file ./data/B2B_BTBR_3M_stranger_4day-out-2020-12-09-batch.txt \
+#       --root-dir "${share_root}" \
+#       --out-file ./data/B2B_BTBR_3M_stranger_4day-out-2020-12-09-social.yaml
+#
+#   ./scripts/find-cbax2-btbr-poses.sh > ./data/CBAX2_BTBR_3M_stranger_4day-out-2020-12-09-batch.txt
+#   share_root='/run/user/1000/gvfs/smb-share:server=bht2stor.jax.org,share=vkumar/VideoData/MDS_Tests/BTBR_3M_stranger_4day'
+#   python -u gensocialstats.py \
+#       --num-procs 3 \
+#       --social-config social-config-2020-08-27.yaml \
+#       --batch-file ./data/CBAX2_BTBR_3M_stranger_4day-out-2020-12-09-batch.txt \
+#       --root-dir "${share_root}" \
+#       --out-file ./data/CBAX2_BTBR_3M_stranger_4day-out-2020-12-09-social.yaml
+
+# AD models - PS19
+#   root_dir='/media/sheppk/TOSHIBA EXT/AD-models-PS19-poses'
+#   python -u gensocialstats.py \
+#       --num-procs 12 \
+#       --social-config social-config-2020-08-27.yaml \
+#       --batch-file "${root_dir}/batch.txt" \
+#       --root-dir "${root_dir}" \
+#       --out-file ./data/AD_models-PS19-out-2021-03-04-social.yaml
+
 
 def main():
     parser = argparse.ArgumentParser()
