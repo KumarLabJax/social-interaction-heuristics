@@ -1,5 +1,8 @@
 h5py
+imageio
+imageio-ffmpeg
 numpy
+opencv-python
 PyYaml
 
 # jupyter notebook requirements

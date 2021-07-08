@@ -295,7 +295,7 @@ def detect_huddles(track_relationships, social_config):
 
     for track_relationship in track_relationships:
 
-        curr_huddles = socialutil.detect_pairwise_huddles(
+        curr_huddles = socialutil.detect_pairwise_proximity_intervals(
                 track_relationship,
                 maximum_distance_px,
                 minimum_duration_frames,
@@ -308,6 +308,62 @@ def detect_huddles(track_relationships, social_config):
                 'track2_id': int(track_relationship['track2']['track_id']),
                 'start_frame': int(huddle_start),
                 'stop_frame_exclu': int(huddle_stop),
+            }
+
+
+def detect_watching(track_relationships, social_config):
+
+    watching_config = social_config['behavior']['watching']
+
+    pose_config = social_config['pose']
+    fps = pose_config['frames_per_sec']
+    pixels_per_cm = pose_config['pixels_per_cm']
+
+    maximum_gaze_offset_deg = watching_config['maximum_gaze_offset_deg']
+    minimum_distance_px = watching_config['minimum_distance_cm'] * pixels_per_cm
+    maximum_distance_px = watching_config['maximum_distance_cm'] * pixels_per_cm
+    minimum_duration_frames = watching_config['minimum_duration_sec'] * fps
+    maximum_gap_merge_frames = watching_config['maximum_gap_merge_sec'] * fps
+
+    return itertools.chain.from_iterable(
+        socialutil.detect_watch_intervals(
+            tr,
+            maximum_gaze_offset_deg,
+            minimum_distance_px,
+            maximum_distance_px,
+            minimum_duration_frames,
+            maximum_gap_merge_frames)
+        for tr in track_relationships
+    )
+
+
+def detect_proximity(track_relationships, social_config, section_name):
+    proximity_config = social_config['behavior'][section_name]
+
+    pose_config = social_config['pose']
+    fps = pose_config['frames_per_sec']
+    pixels_per_cm = pose_config['pixels_per_cm']
+
+    maximum_distance_px = proximity_config['maximum_distance_cm'] * pixels_per_cm
+    minimum_duration_frames = 0
+    maximum_displacement_px = None
+    maximum_gap_merge_frames = proximity_config['maximum_gap_merge_sec'] * fps
+
+    for track_relationship in track_relationships:
+
+        curr_proximity_intervals = socialutil.detect_pairwise_proximity_intervals(
+                track_relationship,
+                maximum_distance_px,
+                minimum_duration_frames,
+                maximum_displacement_px,
+                maximum_gap_merge_frames)
+
+        for inter_start, inter_stop in curr_proximity_intervals:
+            yield {
+                'track1_id': int(track_relationship['track1']['track_id']),
+                'track2_id': int(track_relationship['track2']['track_id']),
+                'start_frame': int(inter_start),
+                'stop_frame_exclu': int(inter_stop),
             }
 
 
@@ -341,6 +397,9 @@ def gen_social_stats(net_file_name, pose_file_name, social_config):
     all_distance_traveled = list(distance_traveled_per_track(instance_tracks.values(), social_config))
     track_relationships = list(socialutil.calc_track_relationships(
         sorted(instance_tracks.values(), key=lambda track: track['start_frame'])))
+    all_contact = list(detect_proximity(track_relationships, social_config, 'contact'))
+    all_close = list(detect_proximity(track_relationships, social_config, 'close'))
+    all_watching = list(detect_watching(track_relationships, social_config))
     all_huddles = list(detect_huddles(track_relationships, social_config))
     all_approaches = list(detect_approach_events(track_relationships, social_config))
     all_chases = list(detect_chase_events(track_relationships, social_config))
@@ -357,6 +416,9 @@ def gen_social_stats(net_file_name, pose_file_name, social_config):
         'oral_ear_contact': all_oral_ear,
         'approaches': all_approaches,
         'huddles': all_huddles,
+        'watching': all_watching,
+        'contact': all_contact,
+        'close': all_close,
         'frame_count': frame_count,
     }
 
@@ -466,7 +528,7 @@ def gen_all_social_stats(data_file_names, social_config, num_procs):
 #   python -u ~/projects/open-field-pipeline/local/postprocverify.py --batch-file data/B2B_ALL_3M_stranger_4day-out-2020-11-12-batch.txt --root "${share_root}" --suffix '_pose_est_v3.h5' > data/B2B_MISSING_3M_stranger_4day-out-2020-11-12-batch.txt
 #   python ~/projects/open-field-pipeline/local/verifybatch.py --batch-file data/B2B_MISSING_3M_stranger_4day-out-2020-11-12-batch.txt --src-root "${share_root}" --dest-root ~/sshfs/winterfastscratch/B2B_MISSING_3M_stranger_4day-2020-11-12
 
-# Reboot: B2B vs CBAX2B - using B6J vs BTBR Three Male Stranger, Four Day Social Interaction
+# Reboot: B2B vs CBAX2B vs Building B6 - using B6J vs BTBR Three Male Stranger, Four Day Social Interaction
 #
 #   ./scripts/find-b2b-b6-poses.sh > ./data/B2B_B6_3M_stranger_4day-out-2020-12-09-batch.txt
 #   share_root='/run/user/1000/gvfs/smb-share:server=bht2stor.jax.org,share=vkumar'
@@ -486,6 +548,15 @@ def gen_all_social_stats(data_file_names, social_config, num_procs):
 #       --root-dir "${share_root}" \
 #       --out-file ./data/CBAX2_B6_3M_stranger_4day-out-2020-12-09-social.yaml
 #
+#   ./scripts/find-b6-b6-poses.sh > ./data/B6_B6_3M_stranger_4day-out-2021-05-13-batch.txt
+#   share_root='/run/user/1000/gvfs/smb-share:server=bht2stor.jax.org,share=vkumar/VideoData/MDS_Tests/B6J_3M_stranger_4day'
+#   python -u gensocialstats.py \
+#       --num-procs 6 \
+#       --social-config social-config-2020-08-27.yaml \
+#       --batch-file ./data/B6_B6_3M_stranger_4day-out-2021-05-13-batch.txt \
+#       --root-dir "${share_root}" \
+#       --out-file ./data/B6_B6_3M_stranger_4day-out-2021-05-13-social.yaml
+#
 #   ./scripts/find-b2b-btbr-poses.sh > ./data/B2B_BTBR_3M_stranger_4day-out-2020-12-09-batch.txt
 #   share_root='/run/user/1000/gvfs/smb-share:server=bht2stor.jax.org,share=vkumar'
 #   python -u gensocialstats.py \
@@ -503,6 +574,15 @@ def gen_all_social_stats(data_file_names, social_config, num_procs):
 #       --batch-file ./data/CBAX2_BTBR_3M_stranger_4day-out-2020-12-09-batch.txt \
 #       --root-dir "${share_root}" \
 #       --out-file ./data/CBAX2_BTBR_3M_stranger_4day-out-2020-12-09-social.yaml
+#
+#   ./scripts/find-b6-btbr-poses.sh > ./data/B6_BTBR_3M_stranger_4day-out-2021-05-13-batch.txt
+#   share_root='/run/user/1000/gvfs/smb-share:server=bht2stor.jax.org,share=vkumar/VideoData/MDS_Tests/BTBR_3M_stranger_4day'
+#   python -u gensocialstats.py \
+#       --num-procs 6 \
+#       --social-config social-config-2020-08-27.yaml \
+#       --batch-file ./data/B6_BTBR_3M_stranger_4day-out-2021-05-13-batch.txt \
+#       --root-dir "${share_root}" \
+#       --out-file ./data/B6_BTBR_3M_stranger_4day-out-2021-05-13-social.yaml
 
 # AD models - PS19
 #   root_dir='/media/sheppk/TOSHIBA EXT/AD-models-PS19-poses'
@@ -513,6 +593,63 @@ def gen_all_social_stats(data_file_names, social_config, num_procs):
 #       --root-dir "${root_dir}" \
 #       --out-file ./data/AD_models-PS19-out-2021-03-04-social.yaml
 
+#   share_root='/run/user/1000/gvfs/smb-share:server=bht2stor.jax.org,share=vkumar/VideoData/MDS_Tests/BTBR_3M_stranger_4day'
+#   python -u gensocialstats.py \
+#       --num-procs 6 \
+#       --social-config social-config.yaml \
+#       --batch-file ./data/B6_BTBR_3M_stranger_4day-out-2021-05-13-batch.txt \
+#       --root-dir "${share_root}" \
+#       --out-file ./data/B6_BTBR_3M_stranger_4day-out-2021-06-10-social.yaml
+
+# 2nd Reboot: B2B vs CBAX2B vs Building B6 - using B6J vs BTBR Three Male Stranger, Four Day Social Interaction
+#
+#   share_root='/run/user/1000/gvfs/smb-share:server=bht2stor.jax.org,share=vkumar/VideoData/MDS_Tests/B6J_3M_stranger_4day'
+#   python -u gensocialstats.py \
+#       --num-procs 3 \
+#       --social-config social-config.yaml \
+#       --batch-file ./data/B2B_B6_3M_stranger_4day-out-2020-12-09-batch.txt \
+#       --root-dir "${share_root}" \
+#       --out-file ./data/B2B_B6_3M_stranger_4day-out-2021-06-11-social.yaml
+#
+#   share_root='/run/user/1000/gvfs/smb-share:server=bht2stor.jax.org,share=vkumar/VideoData/MDS_Tests/B6J_3M_stranger_4day'
+#   python -u gensocialstats.py \
+#       --num-procs 3 \
+#       --social-config social-config.yaml \
+#       --batch-file ./data/CBAX2_B6_3M_stranger_4day-out-2020-12-09-batch.txt \
+#       --root-dir "${share_root}" \
+#       --out-file ./data/CBAX2_B6_3M_stranger_4day-out-2021-06-11-social.yaml
+#
+#   share_root='/run/user/1000/gvfs/smb-share:server=bht2stor.jax.org,share=vkumar/VideoData/MDS_Tests/B6J_3M_stranger_4day'
+#   python -u gensocialstats.py \
+#       --num-procs 3 \
+#       --social-config social-config.yaml \
+#       --batch-file ./data/B6_B6_3M_stranger_4day-out-2021-05-13-batch.txt \
+#       --root-dir "${share_root}" \
+#       --out-file ./data/B6_B6_3M_stranger_4day-out-2021-06-11-social.yaml
+#
+#   share_root='/run/user/1000/gvfs/smb-share:server=bht2stor.jax.org,share=vkumar/VideoData/MDS_Tests/BTBR_3M_stranger_4day'
+#   python -u gensocialstats.py \
+#       --num-procs 3 \
+#       --social-config social-config.yaml \
+#       --batch-file ./data/B2B_BTBR_3M_stranger_4day-out-2020-12-09-batch.txt \
+#       --root-dir "${share_root}" \
+#       --out-file ./data/B2B_BTBR_3M_stranger_4day-out-2021-06-11-social.yaml
+#
+#   share_root='/run/user/1000/gvfs/smb-share:server=bht2stor.jax.org,share=vkumar/VideoData/MDS_Tests/BTBR_3M_stranger_4day'
+#   python -u gensocialstats.py \
+#       --num-procs 3 \
+#       --social-config social-config.yaml \
+#       --batch-file ./data/CBAX2_BTBR_3M_stranger_4day-out-2020-12-09-batch.txt \
+#       --root-dir "${share_root}" \
+#       --out-file ./data/CBAX2_BTBR_3M_stranger_4day-out-2021-06-11-social.yaml
+#
+#   share_root='/run/user/1000/gvfs/smb-share:server=bht2stor.jax.org,share=vkumar/VideoData/MDS_Tests/BTBR_3M_stranger_4day'
+#   python -u gensocialstats.py \
+#       --num-procs 3 \
+#       --social-config social-config.yaml \
+#       --batch-file ./data/B6_BTBR_3M_stranger_4day-out-2021-05-13-batch.txt \
+#       --root-dir "${share_root}" \
+#       --out-file ./data/B6_BTBR_3M_stranger_4day-out-2021-06-11-social.yaml
 
 def main():
     parser = argparse.ArgumentParser()
@@ -555,7 +692,9 @@ def main():
             if row:
                 net_file_name = row[0]
                 data_file_base, _ = os.path.splitext(net_file_name)
-                pose_file_name = os.path.join(args.root_dir, data_file_base + '_pose_est_v3.h5')
+                pose_file_name = os.path.join(args.root_dir, data_file_base + '_pose_est_v4.h5')
+                if not os.path.exists(pose_file_name):
+                    pose_file_name = os.path.join(args.root_dir, data_file_base + '_pose_est_v3.h5')
                 data_file_names.append((net_file_name, pose_file_name))
 
     outdir = os.path.dirname(args.out_file)

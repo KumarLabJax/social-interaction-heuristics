@@ -7,12 +7,29 @@ behavior:
     maximum_displacement_cm: 3
     maximum_gap_merge_sec: 2
 
+  contact:
+
+    maximum_distance_cm: 1
+    maximum_gap_merge_sec: 2
+
+  close:
+
+    maximum_distance_cm: 3
+    maximum_gap_merge_sec: 2
+
   approach:
 
     minimum_pre_approach_distance_cm: 5
     maximum_arrival_distance_cm: 1
     maximum_approach_duration_sec: 10
     maximum_still_speed_cm_sec: 2
+
+  watching:
+    maximum_gaze_offset_deg: 15
+    minimum_distance_cm: 5
+    maximum_distance_cm: 20
+    minimum_duration_sec: 3
+    maximum_gap_merge_sec: 0.5
 
   chase:
 

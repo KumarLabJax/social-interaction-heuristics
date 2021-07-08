@@ -33,46 +33,66 @@ TRACK_INSTANCE_COLORS = [
 
 
 BEHAVIOR_NAMES = [
-    'oral_genital_contact',
-    'oral_oral_contact',
-    'oral_ear_contact',
-    'chases',
-    'approaches',
-    'huddles',
+    # 'oral_genital_contact',
+    # 'oral_oral_contact',
+    # 'oral_ear_contact',
+    # 'chases',
+    # 'approaches',
+    # 'huddles',
+
+    'watching',
+    # 'close',
+    # 'contact',
 ]
 
 
 BEHAVIOR_ANNOTATION_INFO = {
-    'oral_genital_contact': {
+    # 'oral_genital_contact': {
+    #     'horizontal_offset_px': 0,
+    #     'vertical_offset_px': 30,
+    #     'TEXT': 'OG',
+    # },
+    # 'oral_oral_contact': {
+    #     'horizontal_offset_px': 300,
+    #     'vertical_offset_px': 30,
+    #     'TEXT': 'OO',
+    # },
+    # 'oral_ear_contact': {
+    #     'horizontal_offset_px': 600,
+    #     'vertical_offset_px': 30,
+    #     'TEXT': 'OE',
+    # },
+    # 'chases': {
+    #     'horizontal_offset_px': 0,
+    #     'vertical_offset_px': 60,
+    #     'TEXT': 'CH',
+    # },
+    # 'approaches': {
+    #     'horizontal_offset_px': 300,
+    #     'vertical_offset_px': 60,
+    #     'TEXT': 'AP',
+    # },
+    # 'huddles': {
+    #     'horizontal_offset_px': 600,
+    #     'vertical_offset_px': 60,
+    #     'TEXT': 'HU',
+    # },
+
+    'watching': {
         'horizontal_offset_px': 0,
         'vertical_offset_px': 30,
-        'TEXT': 'OG',
+        'TEXT': 'WA',
     },
-    'oral_oral_contact': {
-        'horizontal_offset_px': 300,
-        'vertical_offset_px': 30,
-        'TEXT': 'OO',
-    },
-    'oral_ear_contact': {
-        'horizontal_offset_px': 600,
-        'vertical_offset_px': 30,
-        'TEXT': 'OE',
-    },
-    'chases': {
-        'horizontal_offset_px': 0,
-        'vertical_offset_px': 60,
-        'TEXT': 'CH',
-    },
-    'approaches': {
-        'horizontal_offset_px': 300,
-        'vertical_offset_px': 60,
-        'TEXT': 'AP',
-    },
-    'huddles': {
-        'horizontal_offset_px': 600,
-        'vertical_offset_px': 60,
-        'TEXT': 'HU',
-    },
+    # 'close': {
+    #     'horizontal_offset_px': 300,
+    #     'vertical_offset_px': 30,
+    #     'TEXT': 'CL',
+    # },
+    # 'contact': {
+    #     'horizontal_offset_px': 600,
+    #     'vertical_offset_px': 30,
+    #     'TEXT': 'CO',
+    # },
 }
 
 
@@ -212,6 +232,14 @@ class InteractionVideoClip(object):
 #       --proximity-threshold-cm 3 \
 #       --print-frame-count
 
+# python -u rendersocialclips.py \
+#       --social-config social-config.yaml \
+#       --social-file-in <(cat data/*2021-06-11-social.yaml) \
+#       --root-dir "/media/sheppk/TOSHIBA EXT/rotta-data/B6J-and-BTBR-3M-strangers-4-day-rand-2021-05-24" \
+#       --out-dir "/media/sheppk/TOSHIBA EXT/rotta-data/B6J-and-BTBR-3M-strangers-4-day-rand-2021-05-24-watching-close-contact" \
+#       --allow-missing-video \
+#       --proximity-threshold-cm 3
+
 def main():
 
     parser = argparse.ArgumentParser()
@@ -285,7 +313,9 @@ def main():
             print('PROCESSING:', net_id)
 
             file_no_ext, _ = os.path.splitext(in_video_path)
-            pose_file_name = file_no_ext + '_pose_est_v3.h5'
+            pose_file_name = file_no_ext + '_pose_est_v4.h5'
+            if not os.path.exists(pose_file_name):
+                pose_file_name = file_no_ext + '_pose_est_v3.h5'
             assert os.path.exists(pose_file_name)
 
             behavior_intervals = []
@@ -338,89 +368,140 @@ def main():
                         exclude_points,
                     ))
 
-            for og_contact_index, og_contact in enumerate(video_doc['oral_genital_contact']):
-                track1 = tracks[og_contact['track1_id']]
-                track2 = tracks[og_contact['track2_id']]
+            if 'oral_genital_contact' in BEHAVIOR_ANNOTATION_INFO:
+                for og_contact_index, og_contact in enumerate(video_doc['oral_genital_contact']):
+                    track1 = tracks[og_contact['track1_id']]
+                    track2 = tracks[og_contact['track2_id']]
 
-                curr_contact = InteractionVideoClip(
-                    'oral_genital_contact',
-                    track1,
-                    track2,
-                    og_contact['start_frame'],
-                    og_contact['stop_frame_exclu'],
-                    exclude_points,
-                )
-                behavior_intervals.append(curr_contact)
+                    curr_contact = InteractionVideoClip(
+                        'oral_genital_contact',
+                        track1,
+                        track2,
+                        og_contact['start_frame'],
+                        og_contact['stop_frame_exclu'],
+                        exclude_points,
+                    )
+                    behavior_intervals.append(curr_contact)
 
-            for oo_contact_index, oo_contact in enumerate(video_doc['oral_oral_contact']):
-                track1 = tracks[oo_contact['track1_id']]
-                track2 = tracks[oo_contact['track2_id']]
+            if 'oral_oral_contact' in BEHAVIOR_ANNOTATION_INFO:
+                for oo_contact_index, oo_contact in enumerate(video_doc['oral_oral_contact']):
+                    track1 = tracks[oo_contact['track1_id']]
+                    track2 = tracks[oo_contact['track2_id']]
 
-                curr_contact = InteractionVideoClip(
-                    'oral_oral_contact',
-                    track1,
-                    track2,
-                    oo_contact['start_frame'],
-                    oo_contact['stop_frame_exclu'],
-                    exclude_points,
-                )
-                behavior_intervals.append(curr_contact)
+                    curr_contact = InteractionVideoClip(
+                        'oral_oral_contact',
+                        track1,
+                        track2,
+                        oo_contact['start_frame'],
+                        oo_contact['stop_frame_exclu'],
+                        exclude_points,
+                    )
+                    behavior_intervals.append(curr_contact)
 
-            for oe_contact_index, oe_contact in enumerate(video_doc['oral_ear_contact']):
-                track1 = tracks[oe_contact['track1_id']]
-                track2 = tracks[oe_contact['track2_id']]
+            if 'oral_ear_contact' in BEHAVIOR_ANNOTATION_INFO:
+                for oe_contact_index, oe_contact in enumerate(video_doc['oral_ear_contact']):
+                    track1 = tracks[oe_contact['track1_id']]
+                    track2 = tracks[oe_contact['track2_id']]
 
-                curr_contact = InteractionVideoClip(
-                    'oral_ear_contact',
-                    track1,
-                    track2,
-                    oe_contact['start_frame'],
-                    oe_contact['stop_frame_exclu'],
-                    exclude_points,
-                )
-                behavior_intervals.append(curr_contact)
+                    curr_contact = InteractionVideoClip(
+                        'oral_ear_contact',
+                        track1,
+                        track2,
+                        oe_contact['start_frame'],
+                        oe_contact['stop_frame_exclu'],
+                        exclude_points,
+                    )
+                    behavior_intervals.append(curr_contact)
 
-            for chase_index, chase in enumerate(video_doc['chases']):
-                chaser_track = tracks[chase['chaser_track_id']]
-                chasee_track = tracks[chase['chasee_track_id']]
+            if 'chases' in BEHAVIOR_ANNOTATION_INFO:
+                for chase_index, chase in enumerate(video_doc['chases']):
+                    chaser_track = tracks[chase['chaser_track_id']]
+                    chasee_track = tracks[chase['chasee_track_id']]
 
-                curr_chase = InteractionVideoClip(
-                    'chases',
-                    chaser_track,
-                    chasee_track,
-                    chase['start_frame'],
-                    chase['stop_frame_exclu'],
-                    exclude_points,
-                )
-                behavior_intervals.append(curr_chase)
+                    curr_chase = InteractionVideoClip(
+                        'chases',
+                        chaser_track,
+                        chasee_track,
+                        chase['start_frame'],
+                        chase['stop_frame_exclu'],
+                        exclude_points,
+                    )
+                    behavior_intervals.append(curr_chase)
 
-            for approach_index, approach in enumerate(video_doc['approaches']):
-                approacher_track = tracks[approach['approacher_track_id']]
-                approached_track = tracks[approach['approached_track_id']]
+            if 'approaches' in BEHAVIOR_ANNOTATION_INFO:
+                for approach_index, approach in enumerate(video_doc['approaches']):
+                    approacher_track = tracks[approach['approacher_track_id']]
+                    approached_track = tracks[approach['approached_track_id']]
 
-                curr_approach = InteractionVideoClip(
-                    'approaches',
-                    approacher_track,
-                    approached_track,
-                    approach['start_frame'],
-                    approach['stop_frame_exclu'],
-                    exclude_points,
-                )
-                behavior_intervals.append(curr_approach)
+                    curr_approach = InteractionVideoClip(
+                        'approaches',
+                        approacher_track,
+                        approached_track,
+                        approach['start_frame'],
+                        approach['stop_frame_exclu'],
+                        exclude_points,
+                    )
+                    behavior_intervals.append(curr_approach)
 
-            for huddle_index, huddle in enumerate(video_doc['huddles']):
-                track1 = tracks[huddle['track1_id']]
-                track2 = tracks[huddle['track2_id']]
+            if 'huddles' in BEHAVIOR_ANNOTATION_INFO:
+                for huddle_index, huddle in enumerate(video_doc['huddles']):
+                    track1 = tracks[huddle['track1_id']]
+                    track2 = tracks[huddle['track2_id']]
 
-                curr_huddle = InteractionVideoClip(
-                    'huddles',
-                    track1,
-                    track2,
-                    huddle['start_frame'],
-                    huddle['stop_frame_exclu'],
-                    exclude_points,
-                )
-                behavior_intervals.append(curr_huddle)
+                    curr_huddle = InteractionVideoClip(
+                        'huddles',
+                        track1,
+                        track2,
+                        huddle['start_frame'],
+                        huddle['stop_frame_exclu'],
+                        exclude_points,
+                    )
+                    behavior_intervals.append(curr_huddle)
+
+            if 'watching' in BEHAVIOR_ANNOTATION_INFO:
+                for watching in video_doc['watching']:
+                    track1 = tracks[watching['subject_track_id']]
+                    track2 = tracks[watching['object_track_id']]
+
+                    curr_watching = InteractionVideoClip(
+                        'watching',
+                        track1,
+                        track2,
+                        watching['start_frame'],
+                        watching['stop_frame_exclu'],
+                        exclude_points,
+                    )
+                    behavior_intervals.append(curr_watching)
+
+            if 'close' in BEHAVIOR_ANNOTATION_INFO:
+                for close_interval in video_doc['close']:
+                    track1 = tracks[close_interval['track1_id']]
+                    track2 = tracks[close_interval['track2_id']]
+
+                    curr_close = InteractionVideoClip(
+                        'close',
+                        track1,
+                        track2,
+                        close_interval['start_frame'],
+                        close_interval['stop_frame_exclu'],
+                        exclude_points,
+                    )
+                    behavior_intervals.append(curr_close)
+
+            if 'contact' in BEHAVIOR_ANNOTATION_INFO:
+                for contact_interval in video_doc['contact']:
+                    track1 = tracks[contact_interval['track1_id']]
+                    track2 = tracks[contact_interval['track2_id']]
+
+                    curr_contact = InteractionVideoClip(
+                        'contact',
+                        track1,
+                        track2,
+                        contact_interval['start_frame'],
+                        contact_interval['stop_frame_exclu'],
+                        exclude_points,
+                    )
+                    behavior_intervals.append(curr_contact)
 
             if behavior_intervals:
                 out_video_path = os.path.join(
@@ -460,7 +541,7 @@ def annotate_frame(frame, frame_index, behavior_intervals):
     for bi in behavior_intervals:
         if bi.start_frame <= frame_index < bi.stop_frame_exclu:
 
-            if bi.behavior_name is not None:
+            if bi.behavior_name is not None and bi.behavior_name in BEHAVIOR_ANNOTATION_INFO:
                 interaction_active = (
                     bi.interaction_start_frame <= frame_index < bi.interaction_stop_frame_exclu
                 )

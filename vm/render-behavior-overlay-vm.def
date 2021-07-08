@@ -1,0 +1,22 @@
+# build like:
+#   singularity build --fakeroot render-behavior-overlay-2021-05-06.sif render-behavior-overlay-vm.def
+
+Bootstrap: docker
+From: python:3.8.6-buster
+
+%files
+    .. /social-interaction
+
+%runscript
+    exec python /social-interaction/renderbehavioroverlay.py "$@"
+
+%post
+    apt-get -y update
+    apt-get -y install less
+    apt-get -y install vim
+    apt-get -y install ffmpeg
+    apt-get -y install libsm6
+    apt-get -y install libxext6
+    apt-get -y install libxrender-dev
+    apt-get -y clean
+    pip install -r /social-interaction/requirements.txt

@@ -551,40 +551,41 @@ def _split_interval_by_displacement(pose_interval, track_relationship, maximum_d
         yield curr_start_offset + interval_start, interval_stop
 
 
-def detect_pairwise_huddles(
+def detect_pairwise_proximity_intervals(
         track_relationship,
         maximum_distance_px,
         minimum_duration_frames,
         maximum_displacement_px,
         maximum_gap_merge_frames):
 
-    huddle_candidate_frames = track_relationship['track_distances'] <= maximum_distance_px
-    track1_start_pose = track_relationship['track1_start_pose']
-    track2_start_pose = track_relationship['track2_start_pose']
+    proximity_candidate_frames = track_relationship['track_distances'] <= maximum_distance_px
 
-    # huddle candidates based on proximity
-    huddle_intervals = find_intervals(huddle_candidate_frames, True)
+    # find candidate intervals based on proximity
+    proximity_intervals = find_intervals(proximity_candidate_frames, True)
 
-    # break up candidate intervals where there is too much movement
-    huddle_intervals = itertools.chain.from_iterable(
-        _split_interval_by_displacement(hi, track_relationship, maximum_displacement_px)
-        for hi in huddle_intervals
-    )
+    if maximum_displacement_px is not None:
+        # break up candidate intervals where there is too much movement
+        proximity_intervals = itertools.chain.from_iterable(
+            _split_interval_by_displacement(hi, track_relationship, maximum_displacement_px)
+            for hi in proximity_intervals
+        )
 
-    # remove intervals that are too short-lived
-    huddle_intervals = (
-        hi for hi in huddle_intervals
-        if hi[1] - hi[0] >= minimum_duration_frames
-    )
+    if minimum_duration_frames > 0:
+        # remove intervals that are too short-lived
+        proximity_intervals = (
+            hi for hi in proximity_intervals
+            if hi[1] - hi[0] >= minimum_duration_frames
+        )
 
-    # merge huddles that are close enough in time
-    huddle_intervals = merge_intervals(huddle_intervals, maximum_gap_merge_frames)
+    if maximum_gap_merge_frames > 0:
+        # merge proximity intervals that are close enough in time
+        proximity_intervals = merge_intervals(proximity_intervals, maximum_gap_merge_frames)
 
     # move from track-relationship-relative, to absolute video frames
     relstart = track_relationship['start_frame']
-    huddle_intervals = ((start + relstart, stop + relstart) for start, stop in huddle_intervals)
+    proximity_intervals = ((start + relstart, stop + relstart) for start, stop in proximity_intervals)
 
-    return huddle_intervals
+    return proximity_intervals
 
 
 def _detect_approach_intervals(
@@ -643,7 +644,6 @@ def detect_approach_intervals(
         track2 = track_relationship['track2']
         track2_approach_start_pose = approach_start_frame + track_relationship['track2_start_pose']
         track2_approach_stop_pose = approach_stop_frame + track_relationship['track2_start_pose']
-        track2_speeds = track2['mean_point_speeds'][track2_approach_start_pose:track2_approach_stop_pose]
         track2_max_speed = track2['mean_point_speeds'][track2_approach_start_pose:track2_approach_stop_pose].max()
 
         # it's only considered an approach if one of the two mice are still
@@ -688,3 +688,118 @@ def detect_approach_intervals(
                     'start_frame': int(approach_start_frame + track_relationship['start_frame']),
                     'stop_frame_exclu': int(approach_stop_frame + track_relationship['start_frame']),
                 }
+
+
+def _calculate_gaze_angle_diff_deg(track_a_points, track_b_centroids):
+    nose_xy = track_a_points[:, NOSE_INDEX].astype(np.double)
+    base_neck_xy = track_a_points[:, BASE_NECK_INDEX].astype(np.double)
+
+    nose_offset_xy = nose_xy - base_neck_xy
+    gaze_angle_rad = np.arctan2(nose_offset_xy[:, 1], nose_offset_xy[:, 0])
+    gaze_angle_deg = gaze_angle_rad * (180 / math.pi)
+
+    track_offset_xy = track_b_centroids - base_neck_xy
+    track_angle_rad = np.arctan2(track_offset_xy[:, 1], track_offset_xy[:, 0])
+    track_angle_deg = track_angle_rad * (180 / math.pi)
+
+    gaze_angle_deg[gaze_angle_deg < track_angle_deg] += 360
+    gaze_angle_diff_deg = gaze_angle_deg - track_angle_deg
+    gaze_angle_diff_deg[gaze_angle_diff_deg > 180] -= 360
+
+    return gaze_angle_diff_deg
+
+
+def _detect_watch_intervals(
+        subject_data,
+        object_data,
+        maximum_gaze_offset_deg,
+        within_dist_thresh_frames_arr,
+        minimum_duration_frames,
+        maximum_gap_merge_frames):
+
+    s_track = subject_data['track']
+    s_track_points = s_track['points'][subject_data['start_pose']:subject_data['stop_pose_exclu'], ...]
+    s_track_point_masks = s_track['point_masks'][subject_data['start_pose']:subject_data['stop_pose_exclu'], ...]
+
+    o_track = object_data['track']
+    o_centroids = o_track['centroids'][object_data['start_pose']:object_data['stop_pose_exclu'], :]
+
+    gaze_angle_diff_deg = _calculate_gaze_angle_diff_deg(s_track_points, o_centroids)
+    gaze_offset_within_thresh = np.abs(gaze_angle_diff_deg) <= maximum_gaze_offset_deg
+
+    watch_frames = (
+        within_dist_thresh_frames_arr
+        & gaze_offset_within_thresh
+        & s_track_point_masks[:, NOSE_INDEX].astype(np.bool)
+        & s_track_point_masks[:, BASE_NECK_INDEX].astype(np.bool)
+    )
+
+    watch_intervals = merge_intervals(
+        find_intervals(watch_frames, True),
+        maximum_gap_merge_frames,
+    )
+    watch_intervals = (
+        (inter_start, inter_stop_exclu)
+        for inter_start, inter_stop_exclu in watch_intervals
+        if inter_stop_exclu - inter_start >= minimum_duration_frames
+    )
+
+    return watch_intervals
+
+
+def detect_watch_intervals(
+        track_relationship,
+        maximum_gaze_offset_deg,
+        minimum_distance_px,
+        maximum_distance_px,
+        minimum_duration_frames,
+        maximum_gap_merge_frames):
+
+    track1_data = {
+        'track': track_relationship['track1'],
+        'start_pose': track_relationship['track1_start_pose'],
+        'stop_pose_exclu': track_relationship['track1_stop_pose_exclu'],
+    }
+
+    track2_data = {
+        'track': track_relationship['track2'],
+        'start_pose': track_relationship['track2_start_pose'],
+        'stop_pose_exclu': track_relationship['track2_stop_pose_exclu'],
+    }
+
+    within_dist_thresh_frames_arr = np.logical_and(
+        track_relationship['track_distances'] >= minimum_distance_px,
+        track_relationship['track_distances'] <= maximum_distance_px,
+    )
+
+    track1_watching = _detect_watch_intervals(
+        track1_data,
+        track2_data,
+        maximum_gaze_offset_deg,
+        within_dist_thresh_frames_arr,
+        minimum_duration_frames,
+        maximum_gap_merge_frames)
+
+    for inter_start, inter_stop_exclu in track1_watching:
+        yield {
+            'subject_track_id': int(track_relationship['track1']['track_id']),
+            'object_track_id': int(track_relationship['track2']['track_id']),
+            'start_frame': int(inter_start + track_relationship['start_frame']),
+            'stop_frame_exclu': int(inter_stop_exclu + track_relationship['start_frame']),
+        }
+
+    track2_watching = _detect_watch_intervals(
+        track2_data,
+        track1_data,
+        maximum_gaze_offset_deg,
+        within_dist_thresh_frames_arr,
+        minimum_duration_frames,
+        maximum_gap_merge_frames)
+
+    for inter_start, inter_stop_exclu in track2_watching:
+        yield {
+            'subject_track_id': int(track_relationship['track2']['track_id']),
+            'object_track_id': int(track_relationship['track1']['track_id']),
+            'start_frame': int(inter_start + track_relationship['start_frame']),
+            'stop_frame_exclu': int(inter_stop_exclu + track_relationship['start_frame']),
+        }
